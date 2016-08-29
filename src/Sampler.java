@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.util.*;
 
 import com.oracle.javafx.jmx.json.JSONDocument;
+import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.stat.ranking.NaturalRanking;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -18,6 +19,7 @@ import org.ejml.ops.CommonOps;
 
 import org.apache.commons.math3.distribution.MultivariateNormalDistribution;
 import org.apache.commons.math3.distribution.NormalDistribution;
+import org.apache.commons.math3.analysis.function.Sigmoid;
 
 
 public class Sampler {
@@ -39,6 +41,7 @@ public class Sampler {
     private HashMap<Integer, ArrayList<Integer>> timeArticles;
     //private HashMap<Integer, ArrayList<Integer>> newspaperArticles;
     private HashMap<String, Integer> annotatorIndices;
+    private HashMap<Integer, ArrayList<Integer>> annotatorArticles;
 
     private ArrayList<String> articleNames;
     private ArrayList<HashMap<Integer, int[]>> annotations;
@@ -47,10 +50,10 @@ public class Sampler {
     private static double alpha0 = 0.1;
     private static double beta0 = 0.1;
     private static double betaSigma = 0.1;
-    private static double zealMean = 5;
-    private static double zealSigma = 3;
+    private static double zealMean = 3;
+    private static double zealSigma = 2;
     private static double biasMean = 0;
-    private static double biasSigma = 3;
+    private static double biasSigma = 2;
     private ArrayList<Double> betas;
     private ArrayList<double[]> timeFrames;     // phi
     private ArrayList<double[]> articleFrames;  // theta
@@ -60,10 +63,15 @@ public class Sampler {
     private static double mhDirichletScale = 100.0;
     private static double mhDirichletBias = 0.1;
     private static double mhTimeFrameSigma = 0.09;
-    private static double mhBetaSigma = 0.2;
+    private static double mhBetaSigma = 0.18;
+    private static double mhArticleFrameSigma = 0.4;
+    private static double mhZealSigma = 0.95;
+    private static double mhBiasSigma = 0.22;
 
     private static Random rand = new Random();
     private static RandomStream randomStream = new MRG32k3a();
+
+    private static Sigmoid sigmoid = new Sigmoid();
 
 
     public Sampler(String inputFilename, String metadataFilename) throws Exception {
@@ -115,16 +123,21 @@ public class Sampler {
         Set<String> annotators = gatherAnnotators(data);
         nAnnotators = annotators.size();
         annotatorIndices = new HashMap<>();
+        annotatorArticles = new HashMap<>();
         int j = 0;
         for (String annotator : annotators) {
-            annotatorIndices.put(annotator, j++);
+            annotatorIndices.put(annotator, j);
+            annotatorArticles.put(j, new ArrayList<>());
+            j += 1;
         }
+
 
         // read in the annotations and build up all relevant information
         articleNames = new ArrayList<>();
         articleTime = new HashMap<>();
         articleNewspaper = new HashMap<>();
         annotations = new ArrayList<>();
+
         for (Object articleName : data.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName.toString())) {
@@ -163,6 +176,7 @@ public class Sampler {
                         }
                         // store the annotations for this annotator
                         articleAnnotations.put(annotatorIndex, annotationArray);
+                        annotatorArticles.get(annotatorIndex).add(i);
                     }
                     // store the annotations for this article
                     annotations.add(articleAnnotations);
@@ -275,21 +289,60 @@ public class Sampler {
         }
     }
 
-    void sample() {
-        for (int s = 0; s < 10; s++) {
-            sampleAllOnce();
+    void sample(int nIter, int burnIn, int samplingPeriod) {
+        int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
+
+        double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
+        double betaSamples [][] = new double[nSamples][nTimes];
+        double articleFrameSamples [][][] = new double[nSamples][nArticles][nLabels];
+        double zealSamples [][][] = new double[nSamples][nAnnotators][nLabels];
+        double biasSamples [][][] = new double[nSamples][nAnnotators][nLabels];
+
+        double timeFrameRate = 0.0;
+        double betasRate = 0;
+        double articleFramesRate = 0;
+        double zealRate = 0;
+        double biasRate = 0;
+        int s = 0;
+        int i = 0;
+        while (s < nSamples) {
+            timeFrameRate += sampleTimeFramesGuassian();
+            betasRate += sampleBetas();
+            articleFramesRate += sampleArticleFrames();
+            zealRate += sampleZeal();
+            biasRate += sampleBias();
+
+            // save samples
+            if (i > burnIn && i % samplingPeriod == 0) {
+                for (int t = 0; t < nTimes; t++) {
+                    System.arraycopy(timeFrames.get(t), 0, timeFrameSamples[s][t], 0, nLabels);
+                    betaSamples[s][t] = betas.get(t);
+                }
+                for (int a = 0; a < nArticles; a++) {
+                    System.arraycopy(articleFrames.get(a), 0, articleFrameSamples[s][a], 0, nLabels);
+                }
+                for (int j = 0; j < nAnnotators; j++) {
+                    for (int k = 0; k < nLabels; k++) {
+                        zealSamples[s][j][k] = zeal[j][k];
+                        biasSamples[s][j][k] = bias[j][k];
+                    }
+                }
+
+            }
+            i += 1;
         }
+
+        System.out.println(timeFrameRate / nIter);
+        System.out.println(betasRate / nIter);
+        System.out.println(articleFramesRate/ nIter);
+        System.out.println(zealRate / nIter);
+        System.out.println(biasRate / nIter);
+
+        
+
     }
 
-    void sampleAllOnce() {
-        sampleTimeFramesGuassian();
-        sampleBetas();
-        sampleArticleFrames();
-        sampleBias();
-        sampleZeal();
-    }
-
-    void sampleTimeFrames() {
+    private double sampleTimeFrames() {
         // sample the distribution over frames for the first time point
 
         double nAccepted = 0;
@@ -407,10 +460,6 @@ public class Sampler {
             }
 
             double a = Math.exp(Math.log(mhpReverse) + pLogProposal - Math.log(mhpProposal) - pLogCurrent);
-            if (a > 1.0) {
-                a = 1.0;
-            }
-
             double u = rand.nextDouble();
 
             if (u < a) {
@@ -419,12 +468,11 @@ public class Sampler {
             }
 
         }
-        System.out.println("Acceptance rate = " + nAccepted / nTimes);
+        double acceptanceRate = nAccepted / nTimes;
+        return acceptanceRate;
     }
 
-    void sampleTimeFramesGuassian() {
-        // sample the distribution over frames for the first time point
-
+    private double sampleTimeFramesGuassian() {
         double nAccepted = 0;
 
         // loop through all time points
@@ -555,9 +603,6 @@ public class Sampler {
             }
 
             double a = Math.exp(pLogProposal - pLogCurrent);
-            if (a > 1.0) {
-                a = 1.0;
-            }
 
             double u = rand.nextDouble();
 
@@ -567,12 +612,12 @@ public class Sampler {
             }
 
         }
-        System.out.println("Acceptance rate = " + nAccepted / nTimes);
+        return nAccepted / nTimes;
     }
 
 
 
-    void sampleBetas() {
+    private double sampleBetas() {
         // sample the distribution over frames for the first time point
 
         double nAccepted = 0;
@@ -648,9 +693,6 @@ public class Sampler {
             }
 
             double a = Math.exp(pLogProposal - pLogCurrent);
-            if (a > 1.0) {
-                a = 1.0;
-            }
 
             double u = rand.nextDouble();
 
@@ -660,20 +702,161 @@ public class Sampler {
             }
 
         }
-        //System.out.println("Acceptance rate = " + nAccepted / nTimes);
+        return nAccepted / nTimes;
     }
 
 
-    void sampleArticleFrames() {
+    private double sampleArticleFrames() {
+        double nAccepted = 0;
 
+        // loop through all articles
+        for (int i = 1; i < nArticles; i++) {
+
+            // get the current article dist
+            double current[] = articleFrames.get(i);
+            // create a variable for a proposal
+            double proposal[] = new double[nLabels];
+
+            // generate a proposal (symmetrically)
+            double temp[] = new double[nLabels];
+            double total = 0;
+            for (int k = 0; k < nLabels; k++) {
+                temp[k] = Math.exp(Math.log(current[k]) + rand.nextGaussian() * mhArticleFrameSigma);
+                total += temp[k];
+            }
+            for (int k = 0; k < nLabels; k++) {
+                proposal[k] = temp[k] / total;
+            }
+
+            int time = articleTime.get(i);
+            double beta = betas.get(time);
+            double timeFrame[] = timeFrames.get(time);
+
+            // compute distributions over distributions for articles
+            double articleDist[] = new double[nLabels];
+            for (int k = 0; k < nLabels; k++) {
+                articleDist[k] = timeFrame[k] * nLabels * beta + beta0;
+            }
+
+            DirichletDist dirichletDistArticle = new DirichletDist(articleDist);
+            double pLogCurrent = Math.log(dirichletDistArticle.density(current));
+            double pLogProposal = Math.log(dirichletDistArticle.density(proposal));
+
+            // compute the probability of the labels for both current and proposal
+            HashMap<Integer, int[]> articleAnnotations = annotations.get(i);
+
+            for (int annotator : articleAnnotations.keySet()) {
+                int labels[] = articleAnnotations.get(annotator);
+                for (int k = 0; k < nLabels; k++) {
+                    double pLabelCurrent =  sigmoid.value(current[k] * zeal[annotator][k] + bias[annotator][k]);
+                    double pLabelProposal =  sigmoid.value(proposal[k] * zeal[annotator][k] + bias[annotator][k]);
+                    pLogCurrent += labels[k] * Math.log(pLabelCurrent) + (1 - labels[k]) * Math.log(1 - pLabelCurrent);
+                    pLogProposal += labels[k] * Math.log(pLabelProposal) + (1 - labels[k]) * Math.log(1 - pLabelProposal);
+                }
+            }
+
+            double a = Math.exp(pLogProposal - pLogCurrent);
+
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                articleFrames.set(i, proposal);
+                nAccepted += 1;
+            }
+
+        }
+        return nAccepted / nArticles;
     }
 
-    void sampleZeal() {
+    private double sampleZeal() {
+        double nAccepted = 0;
 
+        // loop through all annotators and labels
+        for (int annotator = 1; annotator < nAnnotators; annotator++) {
+
+            ArrayList<Integer> articles = annotatorArticles.get(annotator);
+
+            for (int k = 0; k < nLabels; k++) {
+
+                // get the current value
+                double current = zeal[annotator][k];
+                // create a variable for a proposal
+                double proposal = current + rand.nextGaussian() * mhZealSigma;
+
+                NormalDistribution zealPrior = new NormalDistribution(zealMean, zealSigma);
+
+                double pLogCurrent = Math.log(zealPrior.density(current));
+                double pLogProposal = Math.log(zealPrior.density(proposal));
+
+                // compute the probability of the annotations for all relevant articles
+
+                for (int article : articles) {
+                    double articleDist[] = articleFrames.get(article);
+                    HashMap<Integer, int[]> articleAnnotations = annotations.get(article);
+                    int labels[] = articleAnnotations.get(annotator);
+                    double pLabelCurrent = sigmoid.value(articleDist[k] * current + bias[annotator][k]);
+                    double pLabelProposal = sigmoid.value(articleDist[k] * proposal + bias[annotator][k]);
+                    pLogCurrent += labels[k] * Math.log(pLabelCurrent) + (1 - labels[k]) * Math.log(1 - pLabelCurrent);
+                    pLogProposal += labels[k] * Math.log(pLabelProposal) + (1 - labels[k]) * Math.log(1 - pLabelProposal);
+                }
+
+                double a = Math.exp(pLogProposal - pLogCurrent);
+
+                double u = rand.nextDouble();
+
+                if (u < a) {
+                    zeal[annotator][k] = proposal;
+                    nAccepted += 1;
+                }
+
+            }
+        }
+        return nAccepted / (nAnnotators * nLabels);
     }
 
-    void sampleBias() {
+    private double sampleBias() {
+        double nAccepted = 0;
 
+        // loop through all annotators and labels
+        for (int annotator = 1; annotator < nAnnotators; annotator++) {
+
+            ArrayList<Integer> articles = annotatorArticles.get(annotator);
+
+            for (int k = 0; k < nLabels; k++) {
+
+                // get the current value
+                double current = bias[annotator][k];
+                // create a variable for a proposal
+                double proposal = current + rand.nextGaussian() * mhBiasSigma;
+
+                NormalDistribution biasPrior = new NormalDistribution(biasMean, biasSigma);
+
+                double pLogCurrent = Math.log(biasPrior.density(current));
+                double pLogProposal = Math.log(biasPrior.density(proposal));
+
+                // compute the probability of the annotations for all relevant articles
+                for (int article : articles) {
+                    double articleDist[] = articleFrames.get(article);
+                    HashMap<Integer, int[]> articleAnnotations = annotations.get(article);
+                    int labels[] = articleAnnotations.get(annotator);
+                    double pLabelCurrent = sigmoid.value(articleDist[k] * zeal[annotator][k]+ current);
+                    double pLabelProposal = sigmoid.value(articleDist[k] * zeal[annotator][k]+ proposal);
+                    pLogCurrent += labels[k] * Math.log(pLabelCurrent) + (1 - labels[k]) * Math.log(1 - pLabelCurrent);
+                    pLogProposal += labels[k] * Math.log(pLabelProposal) + (1 - labels[k]) * Math.log(1 - pLabelProposal);
+                }
+
+                double a = Math.exp(pLogProposal - pLogCurrent);
+
+                double u = rand.nextDouble();
+
+                if (u < a) {
+                    bias[annotator][k] = proposal;
+                    nAccepted += 1;
+                }
+
+            }
+        }
+        return nAccepted / (nAnnotators * nLabels);
     }
 
 }
