@@ -1,4 +1,5 @@
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.nio.file.Paths;
 import java.nio.file.Path;
 import java.util.*;
@@ -62,9 +63,10 @@ public class Sampler {
 
     private static double mhDirichletScale = 100.0;
     private static double mhDirichletBias = 0.1;
-    private static double mhTimeFrameSigma = 0.09;
-    private static double mhBetaSigma = 0.18;
-    private static double mhArticleFrameSigma = 0.4;
+
+    private static double mhTimeFrameSigma = 0.05;
+    private static double mhBetaSigma = 0.1;
+    private static double mhArticleFrameSigma = 0.2;
     private static double mhZealSigma = 0.95;
     private static double mhBiasSigma = 0.22;
 
@@ -88,6 +90,7 @@ public class Sampler {
         // index newspapers
         Set<String> newspapers = gatherNewspapers(metadata);
         nNewspapers = newspapers.size();
+        System.out.println(nNewspapers + " newspapers");
         newspaperIndices = new HashMap<>();
         int n = 0;
         for (String newspaper : newspapers) {
@@ -114,6 +117,8 @@ public class Sampler {
 
         }
 
+        System.out.println(nTimes + " time periods");
+
         timeArticles = new HashMap<>();
         for (int t = 0; t < nTimes; t++) {
             timeArticles.put(t, new ArrayList<>());
@@ -122,6 +127,7 @@ public class Sampler {
         // index annotators
         Set<String> annotators = gatherAnnotators(data);
         nAnnotators = annotators.size();
+        System.out.println(nAnnotators + " annotators");
         annotatorIndices = new HashMap<>();
         annotatorArticles = new HashMap<>();
         int j = 0;
@@ -130,7 +136,7 @@ public class Sampler {
             annotatorArticles.put(j, new ArrayList<>());
             j += 1;
         }
-
+        System.out.println(annotatorIndices);
 
         // read in the annotations and build up all relevant information
         articleNames = new ArrayList<>();
@@ -289,7 +295,7 @@ public class Sampler {
         }
     }
 
-    void sample(int nIter, int burnIn, int samplingPeriod) {
+    void sample(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
         int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
 
         double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
@@ -327,9 +333,12 @@ public class Sampler {
                         biasSamples[s][j][k] = bias[j][k];
                     }
                 }
-
+                s += 1;
             }
             i += 1;
+            if (i % printPeriod == 0) {
+                System.out.println(i);
+            }
         }
 
         System.out.println(timeFrameRate / nIter);
@@ -338,7 +347,85 @@ public class Sampler {
         System.out.println(zealRate / nIter);
         System.out.println(biasRate / nIter);
 
-        
+        // save results
+
+        Path output_path;
+        for (int k = 0; k < nLabels; k++) {
+            output_path = Paths.get("timeFramesSamples" + k + ".csv");
+            try (FileWriter file = new FileWriter(output_path.toString())) {
+                for (s = 0; s < nSamples; s++) {
+                    for (int t = 0; t < nTimes; t++) {
+                        file.write(timeFrameSamples[s][t][k] + ",");
+                    }
+                    file.write("\n");
+                }
+            }
+        }
+
+        output_path = Paths.get("betaSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (s=0; s < nSamples; s++) {
+                for (int t = 0; t < nTimes; t++) {
+                    file.write(betaSamples[s][t] + ",");
+                }
+                file.write("\n");
+            }
+        }
+
+        for (int k = 0; k < nLabels; k++) {
+            output_path = Paths.get("zealSamples" + k + ".csv");
+            try (FileWriter file = new FileWriter(output_path.toString())) {
+                for (s = 0; s < nSamples; s++) {
+                    for (int j = 0; j < nAnnotators; j++) {
+                        file.write(zealSamples[s][j][k] + ",");
+                    }
+                    file.write("\n");
+                }
+            }
+        }
+        for (int k = 0; k < nLabels; k++) {
+            output_path = Paths.get("biasSamples" + k + ".csv");
+            try (FileWriter file = new FileWriter(output_path.toString())) {
+                for (s = 0; s < nSamples; s++) {
+                    for (int j = 0; j < nAnnotators; j++) {
+                        file.write(biasSamples[s][j][k] + ",");
+                    }
+                    file.write("\n");
+                }
+            }
+        }
+
+        for (int k = 0; k < nLabels; k++) {
+            output_path = Paths.get("articleSamples" + k + ".csv");
+            try (FileWriter file = new FileWriter(output_path.toString())) {
+                for (s = 0; s < nSamples; s++) {
+                    for (int a = 0; a < nArticles; a++) {
+                        file.write(articleFrameSamples[s][a][k] + ",");
+                    }
+                    file.write("\n");
+                }
+            }
+        }
+
+        // What I actually want is maybe the annotation probabilities (?)
+
+        output_path = Paths.get("articleMeans.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (int a = 0; a < nArticles; a++) {
+                double mean [] = new double[nLabels];
+                HashMap<Integer, int[]> articleAnnotations = annotations.get(a);
+                for (int annotator : articleAnnotations.keySet()) {
+                    for (int k = 0; k < nLabels; k++) {
+                        mean[k] += (double) articleAnnotations.get(annotator)[k] / (double) articleAnnotations.size();
+                    }
+                }
+                for (int k = 0; k < nLabels; k++) {
+                    file.write(mean[k] + ",");
+                }
+                file.write("\n");
+            }
+        }
+
 
     }
 
@@ -348,7 +435,7 @@ public class Sampler {
         double nAccepted = 0;
 
         // loop through all time points
-        for (int t = 1; t < nTimes; t++) {
+        for (int t = 0; t < nTimes; t++) {
 
             // get the distribution over frames at the previous time point
             double previous[];
@@ -476,7 +563,7 @@ public class Sampler {
         double nAccepted = 0;
 
         // loop through all time points
-        for (int t = 1; t < nTimes; t++) {
+        for (int t = 0; t < nTimes; t++) {
 
             // get the distribution over frames at the previous time point
             double previous[];
@@ -623,7 +710,7 @@ public class Sampler {
         double nAccepted = 0;
 
         // loop through all time points
-        for (int t = 1; t < nTimes; t++) {
+        for (int t = 0; t < nTimes; t++) {
 
             // get the previous beta
             double previous;
@@ -710,7 +797,7 @@ public class Sampler {
         double nAccepted = 0;
 
         // loop through all articles
-        for (int i = 1; i < nArticles; i++) {
+        for (int i = 0; i < nArticles; i++) {
 
             // get the current article dist
             double current[] = articleFrames.get(i);
@@ -772,7 +859,7 @@ public class Sampler {
         double nAccepted = 0;
 
         // loop through all annotators and labels
-        for (int annotator = 1; annotator < nAnnotators; annotator++) {
+        for (int annotator = 0; annotator < nAnnotators; annotator++) {
 
             ArrayList<Integer> articles = annotatorArticles.get(annotator);
 
@@ -818,7 +905,7 @@ public class Sampler {
         double nAccepted = 0;
 
         // loop through all annotators and labels
-        for (int annotator = 1; annotator < nAnnotators; annotator++) {
+        for (int annotator = 0; annotator < nAnnotators; annotator++) {
 
             ArrayList<Integer> articles = annotatorArticles.get(annotator);
 

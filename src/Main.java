@@ -6,7 +6,7 @@ public class Main {
         String metadata = "/Users/dcard/Dropbox/CMU/ARK/compuframes/data/metadata/immigration/summary.json";
         Sampler sampler = new Sampler(documents, metadata);
 
-        sampler.sample();
+        sampler.sample(2000, 500, 10, 100);
 
     }
 }
