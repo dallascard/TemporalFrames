@@ -59,6 +59,7 @@ public class Sampler {
 
     private static double mhDirichletScale = 100.0;
     private static double mhDirichletBias = 0.1;
+    private static double mhTimeFrameSigma = 0.09;
     private static double mhBetaSigma = 0.2;
 
     private static Random rand = new Random();
@@ -281,8 +282,11 @@ public class Sampler {
     }
 
     void sampleAllOnce() {
-        sampleTimeFrames();
+        sampleTimeFramesGuassian();
         sampleBetas();
+        sampleArticleFrames();
+        sampleBias();
+        sampleZeal();
     }
 
     void sampleTimeFrames() {
@@ -357,15 +361,15 @@ public class Sampler {
 
             // compute the probability of the current distribution over frames conditioned on the previous
             DirichletDist dirichletDistPrevious = new DirichletDist(previousDist);
-            double pCurrentGivenPrev = dirichletDist.density(current);
-            double pProposalGivenPrev = dirichletDist.density(proposal);
+            double pCurrentGivenPrev = dirichletDistPrevious.density(current);
+            double pProposalGivenPrev = dirichletDistPrevious.density(proposal);
 
             // do the same for the next time point conditioned on the current and proposal
             DirichletDist dirichletDistCurrent = new DirichletDist(currentDist);
-            double pNextGivenCurrent = dirichletDist.density(next);
+            double pNextGivenCurrent = dirichletDistCurrent.density(next);
 
             DirichletDist dirichletDistProposal = new DirichletDist(proposalDist);
-            double pNextGivenProposal = dirichletDist.density(next);
+            double pNextGivenProposal = dirichletDistProposal.density(next);
 
             double pLogCurrent = Math.log(pCurrentGivenPrev);
             if (t < t-1) {
@@ -417,6 +421,155 @@ public class Sampler {
         }
         System.out.println("Acceptance rate = " + nAccepted / nTimes);
     }
+
+    void sampleTimeFramesGuassian() {
+        // sample the distribution over frames for the first time point
+
+        double nAccepted = 0;
+
+        // loop through all time points
+        for (int t = 1; t < nTimes; t++) {
+
+            // get the distribution over frames at the previous time point
+            double previous[];
+            if (t > 0) {
+                previous = timeFrames.get(t-1);
+            } else {
+                previous = new double[nLabels];
+                for (int k = 0; k < nLabels; k++) {
+                    previous[k] = 1.0 / nLabels;
+                }
+            }
+
+            // use this to compute a distribution over the current distribution over frames
+            double previousDist[] = new double[nLabels];
+            for (int k = 0; k < nLabels; k++) {
+                previousDist[k] = previous[k] * nLabels * alpha + alpha0;
+            }
+
+            // get the current distribution over frames
+            double current[] = timeFrames.get(t);
+            // create a variable for a proposal
+            double proposal[] = new double[nLabels];
+
+            // get the distribution over frames in the next time point
+            double next[] = new double[nLabels];
+            if (t < nTimes-1) {
+                next = timeFrames.get(t + 1);
+            }
+
+
+            // generate a proposal (symmetrically)
+            double temp[] = new double[nLabels];
+            double total = 0;
+            for (int k = 0; k < nLabels; k++) {
+                temp[k] = Math.exp(Math.log(current[k]) + rand.nextGaussian() * mhTimeFrameSigma);
+                total += temp[k];
+            }
+            for (int k = 0; k < nLabels; k++) {
+                proposal[k] = temp[k] / total;
+            }
+
+
+            /*
+            // compute a distribution for generating a proposal
+            double mhProposalDist[] = new double[nLabels];
+            for (int k = 0; k < nLabels; k++) {
+                mhProposalDist[k] = mhDirichletScale * current[k] + mhDirichletBias;
+            }
+
+            // generate a point from this distribution
+            DirichletGen.nextPoint(randomStream, mhProposalDist, proposal);
+
+            // evaluate the probability of generating this new point from the proposal
+            DirichletDist dirichletDist = new DirichletDist(mhProposalDist);
+            double mhpProposal = dirichletDist.density(proposal);
+
+            // compute the probability of the generating the current point from the proposal
+            double reverseDist[] = new double[nLabels];
+            for (int k = 0; k < nLabels; k++) {
+                reverseDist[k] = mhDirichletScale * proposal[k] + mhDirichletBias;
+            }
+
+            DirichletDist dirichletDistReverse = new DirichletDist(reverseDist);
+            double mhpReverse = dirichletDist.density(current);
+            */
+
+            // compute a distribution over a new distribution over frames for the current distribution
+            double currentDist[] = new double[nLabels];
+            for (int k = 0; k < nLabels; k++) {
+                currentDist[k] = current[k] * nLabels * alpha + alpha0;
+            }
+
+            // do the same for the proposal
+            double proposalDist[] = new double[nLabels];
+            for (int k = 0; k < nLabels; k++) {
+                proposalDist[k] = proposal[k] * nLabels * alpha + alpha0;
+            }
+
+            // compute the probability of the current distribution over frames conditioned on the previous
+            DirichletDist dirichletDistPrevious = new DirichletDist(previousDist);
+            double pCurrentGivenPrev = dirichletDistPrevious.density(current);
+            double pProposalGivenPrev = dirichletDistPrevious.density(proposal);
+
+            // do the same for the next time point conditioned on the current and proposal
+            DirichletDist dirichletDistCurrent = new DirichletDist(currentDist);
+            double pNextGivenCurrent = dirichletDistCurrent.density(next);
+
+            DirichletDist dirichletDistProposal = new DirichletDist(proposalDist);
+            double pNextGivenProposal = dirichletDistProposal.density(next);
+
+            double pLogCurrent = Math.log(pCurrentGivenPrev);
+            if (t < t-1) {
+                pLogCurrent += Math.log(pNextGivenCurrent);
+            }
+            double pLogProposal = Math.log(pProposalGivenPrev);
+            if (t < t-1) {
+                pLogProposal += Math.log(pNextGivenProposal);
+            }
+
+            double beta = betas.get(t);
+            // compute distributions over distributions for articles
+            double currentDistArticle[] = new double[nLabels];
+            for (int k = 0; k < nLabels; k++) {
+                currentDistArticle[k] = current[k] * nLabels * beta + beta0;
+            }
+
+            DirichletDist dirichletDistArticleCurrent = new DirichletDist(currentDistArticle);
+
+            double proposalDistArticle[] = new double[nLabels];
+            for (int k = 0; k < nLabels; k++) {
+                proposalDistArticle[k] = proposal[k] * nLabels * beta + beta0;
+            }
+
+            DirichletDist dirichletDistArticleProposal = new DirichletDist(proposalDistArticle);
+
+            // compute the probability of the article disrtibutions for both current and proposal
+            ArrayList<Integer> articles = timeArticles.get(t);
+            for (int i : articles) {
+                double articleDist[] = articleFrames.get(i);
+                double pArticleCurrent = dirichletDistArticleCurrent.density(articleDist);
+                pLogCurrent += Math.log(pArticleCurrent);
+                double pArticleProposal= dirichletDistArticleProposal.density(articleDist);
+                pLogProposal += Math.log(pArticleProposal);
+            }
+
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            if (a > 1.0) {
+                a = 1.0;
+            }
+
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                timeFrames.set(t, proposal);
+                nAccepted += 1;
+            }
+
+        }
+        System.out.println("Acceptance rate = " + nAccepted / nTimes);
+    }
+
 
 
     void sampleBetas() {
@@ -507,11 +660,19 @@ public class Sampler {
             }
 
         }
-        System.out.println("Acceptance rate = " + nAccepted / nTimes);
+        //System.out.println("Acceptance rate = " + nAccepted / nTimes);
     }
 
 
     void sampleArticleFrames() {
+
+    }
+
+    void sampleZeal() {
+
+    }
+
+    void sampleBias() {
 
     }
 
