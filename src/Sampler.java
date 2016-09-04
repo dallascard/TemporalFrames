@@ -65,10 +65,11 @@ public class Sampler {
     private double[] globalMean;
 
     private static double alphaTimes = 2.0;
-    private static double timesRealSigma = 0.02;
+    private static double timesRealSigma = 0.01;
 
-    private static double mhTimeStepSigma = 0.2 ;
-    private static double mhSensSigma = 0.2;
+    private static double mhTimeStepSigma = 0.1 ;
+    private static double mhSensSigma = 0.4;
+    private static double mhSpecSigma = 0.25;
 
     private static Random rand = new Random();
     private static RandomStream randomStream = new MRG32k3a();
@@ -225,6 +226,7 @@ public class Sampler {
         //Do not forget to close the scanner
         scanner.close();
 
+        /*
         int annotatorIndex = nAnnotators;
         annotatorArticles.put(annotatorIndex, new ArrayList<>());
         for (String articleName : predictions.keySet()) {
@@ -260,7 +262,31 @@ public class Sampler {
             }
         }
         nAnnotators += 1;
+        */
 
+        // TEST: Only use articles that already have annotations!
+        int annotatorIndex = nAnnotators;
+        annotatorArticles.put(annotatorIndex, new ArrayList<>());
+        for (String articleName : predictions.keySet()) {
+            // check if this article is in the list of valid articles
+            if (articleNameTime.containsKey(articleName)) {
+                JSONObject article = (JSONObject) data.get(articleName);
+                if (articleNames.contains(articleName)) {
+                    // get the article ID
+                    int i = articleNames.indexOf(articleName);
+                    // create a hashmap to store the annotations for this article
+                    HashMap<Integer, int[]> articleAnnotations = annotations.get(i);
+                    // treat predictions as coming from a separate annotator
+                    articleAnnotations.put(annotatorIndex, predictions.get(articleName));
+                    annotatorArticles.get(annotatorIndex).add(i);
+                    // store the annotations for this article
+                    annotations.set(i, articleAnnotations);
+                }
+            }
+        }
+        nAnnotators += 1;
+
+        // don't bother using predictions for this...
         for (int k = 0; k < nLabels; k++) {
             framesMean[k] = framesMean[k] / (double) count;
         }
@@ -740,7 +766,7 @@ public class Sampler {
 
                 double currentReal = Math.log(-Math.log(current));
 
-                NormalDistribution normDist = new NormalDistribution(0, mhSensSigma);
+                NormalDistribution normDist = new NormalDistribution(0, mhSpecSigma);
                 double proposalReal = currentReal + normDist.sample();
                 double proposal = Math.exp(-Math.exp(proposalReal));
 
