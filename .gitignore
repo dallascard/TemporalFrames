@@ -14,3 +14,9 @@ hs_err_pid*
 # IntelliJ
 *.iml
 .idea
+
+# TeX
+tex/*.aux
+tex/*.log
+tex/*.pdf
+tex/*.gz

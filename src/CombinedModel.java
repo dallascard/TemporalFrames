@@ -1,81 +1,94 @@
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.nio.file.Path;
 import java.util.*;
 
-import cern.jet.math.Mult;
-import cern.jet.random.Normal;
-import com.oracle.javafx.jmx.json.JSONDocument;
-import org.apache.commons.math3.distribution.GammaDistribution;
-import org.apache.commons.math3.linear.ArrayRealVector;
-import org.apache.commons.math3.special.Gamma;
-import org.apache.commons.math3.stat.ranking.NaturalRanking;
+import org.apache.commons.math3.distribution.NormalDistribution;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
-import umontreal.ssj.randvarmulti.DirichletGen;
-import umontreal.ssj.probdistmulti.DirichletDist;
 import umontreal.ssj.rng.*;
 
-import org.ejml.data.DenseMatrix64F;
-import org.ejml.ops.CommonOps;
-
 import org.apache.commons.math3.distribution.MultivariateNormalDistribution;
-import org.apache.commons.math3.distribution.BetaDistribution;
-import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.analysis.function.Sigmoid;
 
 
-public class Sampler {
+public class CombinedModel {
 
-    private int nArticles;
-    private int nAnnotators;
-    private int nLabels;
+    private int nArticlesWithFraming;
+    private int nArticlesWithTone;
+    private int nFramingAnnotators;
+    private int nToneAnnotators;
     private int nTimes;
     private int nNewspapers;
 
+    private static int nLabels = 15;
+    private static int nTones = 3;
+
     private static int firstYear = 1980;
+    private static int firstQuarter = 1;
     private static int nMonthsPerYear = 12;
     private static int nQuartersPerYear = 4;
     private static int nMonthsPerQuarter = 3;
+    private static int nFeatures = 7;
 
+    private Set<String> relevantArticles;
     private HashMap<String, Integer> newspaperIndices;
     private HashMap<String, Integer> articleNameTime;
     private HashMap<String, Integer> articleNameNewspaper;
-    private HashMap<Integer, Integer> articleTime;
-    private HashMap<Integer, Integer> articleNewspaper;
-    private HashMap<Integer, ArrayList<Integer>> timeArticles;
-    //private HashMap<Integer, ArrayList<Integer>> newspaperArticles;
-    private HashMap<String, Integer> annotatorIndices;
-    private HashMap<Integer, ArrayList<Integer>> annotatorArticles;
+    private HashMap<Integer, Integer> framingArticleTime;
+    private HashMap<Integer, Integer> toneArticleTime;
+    private HashMap<Integer, Integer> framingArticleNewspaper;
+    private HashMap<Integer, Integer> toneArticleNewspaper;
+    private HashMap<Integer, ArrayList<Integer>> timeFramingArticles;
+    private HashMap<Integer, ArrayList<Integer>> timeToneArticles;
+    private HashMap<String, Integer> framingAnnotatorIndices;
+    private HashMap<String, Integer> toneAnnotatorIndices;
+    private HashMap<Integer, ArrayList<Integer>> framingAnnotatorArticles;
+    private HashMap<Integer, ArrayList<Integer>> toneAnnotatorArticles;
 
-    private ArrayList<String> articleNames;
-    private ArrayList<HashMap<Integer, int[]>> annotations;
+    private ArrayList<String> framingArticleNames;
+    private ArrayList<String> toneArticleNames;
+    private ArrayList<HashMap<Integer, int[]>> framingAnnotations;
+    private ArrayList<HashMap<Integer, Integer>> toneAnnotations;
 
     private ArrayList<double[]> timeFramesReals;     // phi
     private ArrayList<double[]> timeFramesCube;
     private ArrayList<int[]> articleFrames ;  // theta
-    private double[][] sens;
-    private double[][] spec;
+    private ArrayList<double[]> timeToneReals;     // phi
+    private ArrayList<double[]> timeToneSimplex;
+    private ArrayList<Integer> articleTone ;
+    private double[][] q;  // framing sensitivity
+    private double[][] r;  // framing specificity
+    private double[][][] s;  // combined equivalent of sens / spec for tone
+    private double[] weights;
+
     private double[] framesMean;
+    private double[] tonesMean;
     private double[] globalMean;
 
-    private static double alphaTimes = 2.0;
-    private static double timesRealSigma = 0.01;
+    private double[] mood;
+    private double[] nArticlesAtTime;
 
-    private static double mhTimeStepSigma = 0.1 ;
-    private static double mhSensSigma = 0.4;
-    private static double mhSpecSigma = 0.25;
+    private double timeFramesRealSigma = 0.01;
+    private double timeToneRealSigma = 0.01;
+    private double weightSigma = 10.0;
+    private double moodSigma = 1.0;
+
+    private static double mhTimeFramesStepSigma = 0.1 ;
+    private static double mhTimeToneStepSigma = 0.1 ;
+    private static double [] mhWeightsStepSigma = {0.5, 1.0, 1.0, 1.0, 1.0, 0.1, 0.5};
+    //private static double mhSensSigma = 0.4;
+    //private static double mhSpecSigma = 0.25;
 
     private static Random rand = new Random();
     private static RandomStream randomStream = new MRG32k3a();
     private static Sigmoid sigmoid = new Sigmoid();
 
-    public Sampler(String inputFilename, String metadataFilename, String predictionsFilename) throws Exception {
+    public CombinedModel(String inputFilename, String metadataFilename, String predictionsFilename, String moodFilename) throws Exception {
 
         Path inputPath = Paths.get(inputFilename);
         JSONParser parser = new JSONParser();
@@ -83,8 +96,6 @@ public class Sampler {
 
         Path metadataPath = Paths.get(metadataFilename);
         JSONObject metadata = (JSONObject) parser.parse(new FileReader(metadataPath.toString()));
-
-        nLabels = 15;
 
         // index newspapers
         Set<String> newspapers = gatherNewspapers(metadata);
@@ -105,8 +116,9 @@ public class Sampler {
             String source = (String) articleMetadata.get("source");
             int year = ((Long) articleMetadata.get("year")).intValue();
             int month = ((Long) articleMetadata.get("month")).intValue() - 1;
-            int quarter = (int) Math.floor((double) month / (double) nMonthsPerQuarter);
-            int time = (year - firstYear) * nQuartersPerYear + quarter;
+            //int quarter = (int) Math.floor((double) month / (double) nMonthsPerQuarter);
+            //int time = (year - firstYear) * nQuartersPerYear + quarter;
+            int time = yearAndMonthToTime(year, month);
             if (time >= 0) {
                 articleNameTime.put(articleName.toString(), time);
                 articleNameNewspaper.put(articleName.toString(), newspaperIndices.get(source));
@@ -114,111 +126,198 @@ public class Sampler {
             if (time >= nTimes) {
                 nTimes = time + 1;
             }
-
         }
 
         System.out.println(nTimes + " time periods");
 
-        timeArticles = new HashMap<>();
-        for (int t = 0; t < nTimes; t++) {
-            timeArticles.put(t, new ArrayList<>());
+        // record the total number of articles at each time step
+        nArticlesAtTime = new double[nTimes];
+        for (int time : articleNameTime.values()) {
+            nArticlesAtTime[time] += 1;
         }
+        double nMax = 0;
+        for (int t = 0; t < nTimes; t++) {
+            nMax = Math.max(nMax, nArticlesAtTime[t]);
+        }
+        for (int t = 0; t < nTimes; t++) {
+            nArticlesAtTime[t] /= nMax;
+        }
+
+        // intialize some empty arrays
+        timeFramingArticles = new HashMap<>();
+        for (int t = 0; t < nTimes; t++) {
+            timeFramingArticles.put(t, new ArrayList<>());
+        }
+        timeToneArticles = new HashMap<>();
+        for (int t = 0; t < nTimes; t++) {
+            timeToneArticles.put(t, new ArrayList<>());
+        }
+
+        // determine the relevant articles based on annotations
+        relevantArticles = getRelevantArticles(data);
 
         // index annotators
-        Set<String> annotators = gatherAnnotators(data);
-        nAnnotators = annotators.size();
-        System.out.println(nAnnotators + " annotators");
-        annotatorIndices = new HashMap<>();
-        annotatorArticles = new HashMap<>();
-        int j = 0;
-        for (String annotator : annotators) {
-            annotatorIndices.put(annotator, j);
-            annotatorArticles.put(j, new ArrayList<>());
-            j += 1;
+        Set<String> framingAnnotators = gatherFramingAnnotators(data);
+        nFramingAnnotators= framingAnnotators.size();
+        Set<String> toneAnnotators = gatherToneAnnotators(data);
+        nToneAnnotators = toneAnnotators.size();
+
+        System.out.println(nFramingAnnotators + " framing annotators");
+        System.out.println(nToneAnnotators + " tone annotators");
+        framingAnnotatorIndices = new HashMap<>();
+        toneAnnotatorIndices = new HashMap<>();
+        framingAnnotatorArticles = new HashMap<>();
+        toneAnnotatorArticles = new HashMap<>();
+        int k = 0;
+        for (String annotator : framingAnnotators) {
+            framingAnnotatorIndices.put(annotator, k);
+            framingAnnotatorArticles.put(k, new ArrayList<>());
+            k += 1;
         }
-        System.out.println(annotatorIndices);
+        System.out.println(framingAnnotatorIndices);
+        k = 0;
+        for (String annotator : toneAnnotators) {
+            toneAnnotatorIndices.put(annotator, k);
+            toneAnnotatorArticles.put(k, new ArrayList<>());
+            k += 1;
+        }
+        System.out.println(toneAnnotatorIndices);
 
         // read in the annotations and build up all relevant information
-        articleNames = new ArrayList<>();
-        articleTime = new HashMap<>();
-        articleNewspaper = new HashMap<>();
-        annotations = new ArrayList<>();
+        framingArticleNames = new ArrayList<>();
+        toneArticleNames = new ArrayList<>();
+        framingArticleTime = new HashMap<>();
+        toneArticleTime = new HashMap<>();
+        framingArticleNewspaper = new HashMap<>();
+        toneArticleNewspaper = new HashMap<>();
+        framingAnnotations = new ArrayList<>();
+        toneAnnotations = new ArrayList<>();
         framesMean = new double[nLabels];
-        int count = 0;
+        tonesMean = new double[nTones];
+
+        int framingCount = 0;
+        int toneCount = 0;
         for (Object articleName : data.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName.toString())) {
-                JSONObject article = (JSONObject) data.get(articleName);
-                JSONObject annotationsJson = (JSONObject) article.get("annotations");
-                JSONObject framingAnnotations = (JSONObject) annotationsJson.get("framing");
-                // make sure this article has annotations
-                if (framingAnnotations.size() > 0) {
-                    // get a new article id (i)
-                    int i = articleNames.size();
-                    // store the article name for future reference
-                    articleNames.add(articleName.toString());
-                    // get the timestep for this article (by name)
-                    int time = articleNameTime.get(articleName.toString());
-                    articleTime.put(i, time);
-                    // get the newspaper for this article (by name)
-                    articleNewspaper.put(i, articleNameNewspaper.get(articleName.toString()));
-                    // create a hashmap to store the annotations for this article
-                    HashMap<Integer, int[]> articleAnnotations = new HashMap<>();
-                    // loop through the annotators for this article
-                    for (Object annotator : framingAnnotations.keySet()) {
-                        // for each one, create an array to hold the annotations, and set to zero
-                        int annotationArray[] = new int[nLabels];
-                        // get the anntoator name and index
-                        String parts[] = annotator.toString().split("_");
-                        int annotatorIndex = annotatorIndices.get(parts[0]);
-                        // loop through this annotator's annotations
-                        JSONArray annotatorAnnotations = (JSONArray) framingAnnotations.get(annotator);
-                        for (Object annotation : annotatorAnnotations) {
-                            // get the code
-                            double realCode = (Double) ((JSONObject) annotation).get("code");
-                            // subtract 1 for zero-based indexing
-                            int code = (int) Math.round(realCode) - 1;
-                            // record this code as being present
-                            annotationArray[code] = 1;
+                if (relevantArticles.contains(articleName.toString())) {
+                    JSONObject article = (JSONObject) data.get(articleName);
+                    JSONObject annotationsJson = (JSONObject) article.get("annotations");
+                    JSONObject articleFramingAnnotations = (JSONObject) annotationsJson.get("framing");
+                    JSONObject articleToneAnnotations = (JSONObject) annotationsJson.get("tone");
+                    // make sure this article has annotations
+                    if (articleFramingAnnotations.size() > 0) {
+                        // get a new article id (i)
+                        int i = framingArticleNames.size();
+                        // store the article name for future reference
+                        framingArticleNames.add(articleName.toString());
+                        // get the timestep for this article (by name)
+                        int time = articleNameTime.get(articleName.toString());
+                        framingArticleTime.put(i, time);
+                        // get the newspaper for this article (by name)
+                        framingArticleNewspaper.put(i, articleNameNewspaper.get(articleName.toString()));
+                        // create a hashmap to store the annotations for this article
+                        HashMap<Integer, int[]> articleAnnotations = new HashMap<>();
+                        // loop through the annotators for this article
+                        for (Object annotator : articleFramingAnnotations.keySet()) {
+                            // for each one, create an array to hold the annotations, and set to zero
+                            int annotationArray[] = new int[nLabels];
+                            // get the anntoator name and index
+                            String parts[] = annotator.toString().split("_");
+                            int annotatorIndex = framingAnnotatorIndices.get(parts[0]);
+                            // loop through this annotator's annotations
+                            JSONArray annotatorAnnotations = (JSONArray) articleFramingAnnotations.get(annotator);
+                            for (Object annotation : annotatorAnnotations) {
+                                // get the code
+                                double realCode = (Double) ((JSONObject) annotation).get("code");
+                                // subtract 1 for zero-based indexing
+                                int code = (int) Math.round(realCode) - 1;
+                                // record this code as being present
+                                annotationArray[code] = 1;
+                            }
+                            // store the annotations for this annotator
+                            articleAnnotations.put(annotatorIndex, annotationArray);
+                            framingAnnotatorArticles.get(annotatorIndex).add(i);
+                            for (int j = 0; j < nLabels; j++) {
+                                framesMean[j] += (double) annotationArray[j];
+                            }
+                            framingCount += 1;
                         }
-                        // store the annotations for this annotator
-                        articleAnnotations.put(annotatorIndex, annotationArray);
-                        // store the total number of annotations for each label
-                        annotatorArticles.get(annotatorIndex).add(i);
-                        for (int k = 0; k < nLabels; k++) {
-                            framesMean[k] += (double) annotationArray[k];
-                        }
-                        count += 1;
+                        // store the annotations for this article
+                        framingAnnotations.add(articleAnnotations);
+                        timeFramingArticles.get(time).add(i);
                     }
-                    // store the annotations for this article
-                    annotations.add(articleAnnotations);
-                    timeArticles.get(time).add(i);
+                    if (articleToneAnnotations.size() > 0) {
+                        // get a new article id (i)
+                        int i = toneArticleNames.size();
+                        // store the article name for future reference
+                        toneArticleNames.add(articleName.toString());
+                        // get the timestep for this article (by name)
+                        int time = articleNameTime.get(articleName.toString());
+                        toneArticleTime.put(i, time);
+                        // get the newspaper for this article (by name)
+                        toneArticleNewspaper.put(i, articleNameNewspaper.get(articleName.toString()));
+                        // create a hashmap to store the annotations for this article
+                        HashMap<Integer, Integer> articleAnnotations = new HashMap<>();
+                        // loop through the annotators for this article
+                        for (Object annotator : articleToneAnnotations.keySet()) {
+                            // for each one, prepare to hold the tone annotation
+                            int toneAnnotation = 0;
+                            // get the anntoator name and index
+                            String parts[] = annotator.toString().split("_");
+                            int annotatorIndex = toneAnnotatorIndices.get(parts[0]);
+                            // loop through this annotator's annotations (should be only 1)
+                            JSONArray annotatorAnnotations = (JSONArray) articleToneAnnotations.get(annotator);
+                            for (Object annotation : annotatorAnnotations) {
+                                // get the code
+                                double realCode = (Double) ((JSONObject) annotation).get("code");
+                                // subtract 17 for zero-based indexing
+                                toneAnnotation = (int) Math.round(realCode) - 17;
+                            }
+                            // store the annotations for this annotator
+                            articleAnnotations.put(annotatorIndex, toneAnnotation);
+                            toneAnnotatorArticles.get(annotatorIndex).add(i);
+                            tonesMean[toneAnnotation] += 1.0;
+                            toneCount += 1;
+                        }
+                        // store the annotations for this article
+                        toneAnnotations.add(articleAnnotations);
+                        timeToneArticles.get(time).add(i);
+                    }
                 }
             }
         }
 
         // read in predictions and add to annotations
         Scanner scanner = new Scanner(new File(predictionsFilename));
-        HashMap<String, int[]> predictions = new HashMap<>();
+        HashMap<String, int[]> framingPredictions = new HashMap<>();
+        HashMap<String, Integer> tonePredictions = new HashMap<>();
         scanner.useDelimiter(",");
-        for (int i = 0; i < 17; i++) {
+        // skip the header
+        for (int i = 0; i < 19; i++) {
             String next = scanner.next();
         }
         String rowArticleName = "";
         int[] pArray = new int[nLabels];
+        int tVal = 0;
         int iNext = 0;
         while (scanner.hasNext()) {
             String next = scanner.next();
-            int k = iNext % 17;
-            if (k == 1) {
+            int j = iNext % 18;
+            if (j == 1) {
                 rowArticleName = next;
             }
-            else if (k > 1) {
-                pArray[k-2] = Integer.parseInt(next);
+            else if (j > 1 && j < 16) {
+                pArray[j-2] = Integer.parseInt(next);
             }
-            if (k == 16) {
-                predictions.put(rowArticleName, pArray);
+            else if (j == 16) {
+                tVal = Integer.parseInt(next);
+            }
+            if (j == 17) {
+                framingPredictions.put(rowArticleName, pArray);
+                tonePredictions.put(rowArticleName, tVal);
                 pArray = new int[nLabels];
+                tVal = 0;
             }
             iNext += 1;
         }
@@ -265,43 +364,137 @@ public class Sampler {
         */
 
         // TEST: Only use articles that already have annotations!
-        int annotatorIndex = nAnnotators;
-        annotatorArticles.put(annotatorIndex, new ArrayList<>());
-        for (String articleName : predictions.keySet()) {
+        // treat the predictions as a new anntotator
+        int annotatorIndex = nFramingAnnotators;
+        framingAnnotatorArticles.put(annotatorIndex, new ArrayList<>());
+        for (String articleName : framingPredictions.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName)) {
-                JSONObject article = (JSONObject) data.get(articleName);
-                if (articleNames.contains(articleName)) {
+                if (framingArticleNames.contains(articleName)) {
                     // get the article ID
-                    int i = articleNames.indexOf(articleName);
+                    int i = framingArticleNames.indexOf(articleName);
                     // create a hashmap to store the annotations for this article
-                    HashMap<Integer, int[]> articleAnnotations = annotations.get(i);
+                    HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
                     // treat predictions as coming from a separate annotator
-                    articleAnnotations.put(annotatorIndex, predictions.get(articleName));
-                    annotatorArticles.get(annotatorIndex).add(i);
+                    articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
+                    framingAnnotatorArticles.get(annotatorIndex).add(i);
                     // store the annotations for this article
-                    annotations.set(i, articleAnnotations);
+                    framingAnnotations.set(i, articleAnnotations);
                 }
             }
         }
-        nAnnotators += 1;
+        nFramingAnnotators += 1;
 
-        // don't bother using predictions for this...
-        for (int k = 0; k < nLabels; k++) {
-            framesMean[k] = framesMean[k] / (double) count;
+        // treat the predictions as a new anntotator
+        annotatorIndex = nToneAnnotators;
+        toneAnnotatorArticles.put(annotatorIndex, new ArrayList<>());
+        for (String articleName : tonePredictions.keySet()) {
+            // check if this article is in the list of valid articles
+            if (articleNameTime.containsKey(articleName)) {
+                if (toneArticleNames.contains(articleName)) {
+                    // get the article ID
+                    int i = toneArticleNames.indexOf(articleName);
+                    // create a hashmap to store the annotations for this article
+                    HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
+                    // treat predictions as coming from a separate annotator
+                    articleAnnotations.put(annotatorIndex, tonePredictions.get(articleName));
+                    toneAnnotatorArticles.get(annotatorIndex).add(i);
+                    // store the annotations for this article
+                    toneAnnotations.set(i, articleAnnotations);
+                }
+            }
+        }
+        nToneAnnotators += 1;
+
+        // get the mean of the annotations as a sanity check
+        for (int j = 0; j < nLabels; j++) {
+            framesMean[j] = framesMean[j] / (double) framingCount;
+        }
+        for (int j = 0; j < nTones; j++) {
+            tonesMean[j] = tonesMean[j] / (double) toneCount;
         }
 
-        nArticles = annotations.size();
+        nArticlesWithFraming = framingAnnotations.size();
+        nArticlesWithTone = toneAnnotations.size();
 
         System.out.println("Mean of anntoations:");
-        for (int k = 0; k < nLabels; k++) {
-            System.out.print(framesMean[k] + " ");
+        for (int j = 0; j < nLabels; j++) {
+            System.out.print(framesMean[j] + " ");
         }
+
+        System.out.println("Mean of tone anntoations:");
+        for (int j = 0; j < nTones; j++) {
+            System.out.print(tonesMean[j] + " ");
+        }
+        System.out.println("");
+
+        // read in mood data
+        mood = new double[nTimes];
+        scanner = new Scanner(new File(moodFilename));
+        scanner.useDelimiter(",");
+        // skip the header
+        for (int i = 0; i < 6; i++) {
+            String next = scanner.next();
+        }
+        int year = 0;
+        int quarter = 0;
+        double moodVal = 0;
+        iNext = 0;
+        while (scanner.hasNext()) {
+            String next = scanner.next();
+            int j = iNext % 6;
+            if (j == 1) {
+                year = Integer.parseInt(next);
+            }
+            else if (j == 2) {
+                quarter = Integer.parseInt(next)-1;
+            }
+            else if (j == 3) {
+                // normalize mood to be in the range (-1, 1)
+                moodVal = (Double.parseDouble(next) - 50) / 50.0;
+            }
+            else if (j == 5) {
+                int time = yearAndQuarterToTime(year, quarter);
+                if (time >= 0 && time < nTimes) {
+                    mood[time] = moodVal;
+                }
+            }
+            iNext += 1;
+        }
+
+        //Do not forget to close the scanner
+        scanner.close();
+
+        // display mood data
+        /*
+        for (int t = 0; t < nTimes; t++) {
+            //quarter = t % nQuartersPerYear;
+            //year = (t - quarter) / nQuartersPerYear + firstYear;
+            int nFramingArticles = timeFramingArticles.get(t).size();
+            int nToneArticles = timeToneArticles.get(t).size();
+            double yearQuarter = timeToYearAndQuarter(t);
+            //System.out.println(yearQuarter + " : " + nFramingArticles + ", " + nToneArticles);
+            //System.out.println(yearQuarter + " : " + mood[t]);
+        }
+        */
 
         initialize();
 
     }
 
+
+    private int yearAndMonthToTime(int year, int month) {
+        int quarter = (int) Math.floor((double) month / (double) nMonthsPerQuarter);
+        return yearAndQuarterToTime(year, quarter);
+    }
+
+    private int yearAndQuarterToTime(int year, int quarter) {
+        return (year - firstYear) * nQuartersPerYear + quarter - firstQuarter;
+    }
+
+    private double timeToYearAndQuarter(int time) {
+        return (double) (time + firstQuarter) / (double) nQuartersPerYear + firstYear;
+    }
 
     private Set<String> gatherNewspapers(JSONObject metadata) {
         /*
@@ -319,7 +512,31 @@ public class Sampler {
         return newspapers;
     }
 
-    private Set<String> gatherAnnotators(JSONObject data) {
+    private Set<String> getRelevantArticles(JSONObject data) {
+        Set<String> relevantArticles = new HashSet<>();
+
+        for (Object articleName : data.keySet()) {
+            // check if this article is in the list of valid articles
+            if (articleNameTime.containsKey(articleName.toString())) {
+                boolean relevant = true;
+                JSONObject article = (JSONObject) data.get(articleName);
+                JSONObject annotations = (JSONObject) article.get("annotations");
+                JSONObject relevanceJudgements = (JSONObject) annotations.get("irrelevant");
+                for (Object annotator : relevanceJudgements.keySet()) {
+                    boolean irrelevant = (boolean) relevanceJudgements.get(annotator);
+                    if (irrelevant) {
+                        relevant = false;
+                    }
+                }
+                if (relevant) {
+                    relevantArticles.add(articleName.toString());
+                }
+            }
+        }
+        return relevantArticles;
+    }
+
+    private Set<String> gatherFramingAnnotators(JSONObject data) {
         /*
         Read in the data and build up the set of annotators for valid articles
          */
@@ -328,160 +545,290 @@ public class Sampler {
         for (Object articleName : data.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName.toString())) {
-                JSONObject article = (JSONObject) data.get(articleName);
-                JSONObject annotations = (JSONObject) article.get("annotations");
-                JSONObject framingAnnotations = (JSONObject) annotations.get("framing");
-                for (Object annotator : framingAnnotations.keySet()) {
-                    String parts[] = annotator.toString().split("_");
-                    annotators.add(parts[0]);
+                if (relevantArticles.contains(articleName.toString())) {
+                    JSONObject article = (JSONObject) data.get(articleName);
+                    JSONObject annotations = (JSONObject) article.get("annotations");
+                    JSONObject framingAnnotations = (JSONObject) annotations.get("framing");
+                    for (Object annotator : framingAnnotations.keySet()) {
+                        String parts[] = annotator.toString().split("_");
+                        annotators.add(parts[0]);
+                    }
                 }
             }
         }
         return annotators;
     }
 
-    /*
-    Initialize random variables
-     */
+    private Set<String> gatherToneAnnotators(JSONObject data) {
+        /*
+        Read in the data and build up the set of annotators for valid articles
+         */
+        Set<String> annotators = new HashSet<>();
+
+        for (Object articleName : data.keySet()) {
+            // check if this article is in the list of valid articles
+            if (articleNameTime.containsKey(articleName.toString())) {
+                if (relevantArticles.contains(articleName.toString())) {
+                    JSONObject article = (JSONObject) data.get(articleName);
+                    JSONObject annotations = (JSONObject) article.get("annotations");
+                    JSONObject framingAnnotations = (JSONObject) annotations.get("tone");
+                    for (Object annotator : framingAnnotations.keySet()) {
+                        String parts[] = annotator.toString().split("_");
+                        annotators.add(parts[0]);
+                    }
+                }
+            }
+        }
+        return annotators;
+    }
+
     private void initialize() {
-        // initialize article frames based on mean of annotations
+        // initialize article frames based on annotations
         articleFrames = new ArrayList<>();
-        for (int i = 0; i < nArticles; i++) {
+        for (int i = 0; i < nArticlesWithFraming; i++) {
             int initialLabels[] = new int[nLabels];
             double annotationCounts[] = new double[nLabels];
             // add the contributions of each annotator
-            HashMap<Integer, int[]> articleAnnotations = annotations.get(i);
+            HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
             double nAnnotators = (double) articleAnnotations.size();
             for (int annotator : articleAnnotations.keySet()) {
                 int annotatorAnnotations[] = articleAnnotations.get(annotator);
-                for (int k = 0; k < nLabels; k++) {
-                    annotationCounts[k] += (double) annotatorAnnotations[k] / nAnnotators;
+                for (int j = 0; j < nLabels; j++) {
+                    annotationCounts[j] += (double) annotatorAnnotations[j] / nAnnotators;
                 }
             }
-            for (int k = 0; k < nLabels; k++) {
+            for (int j = 0; j < nLabels; j++) {
                 double u = rand.nextDouble();
-                if (u < annotationCounts[k]) {
-                    initialLabels[k] = 1;
+                if (u < annotationCounts[j]) {
+                    initialLabels[j] = 1;
                 }
             }
             articleFrames.add(initialLabels);
         }
 
-        // initialize timeFrames as the mean of the corresponding articles
+        // initialize article tones based on annotations
+        articleTone = new ArrayList<>();
+        for (int i = 0; i < nArticlesWithTone; i++) {
+            double annotationCounts[] = new double[nTones];
+            // add the contributions of each annotator
+            HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
+            double nAnnotators = (double) articleAnnotations.size();
+            for (int annotator : articleAnnotations.keySet()) {
+                int annotatorTone = articleAnnotations.get(annotator);
+                annotationCounts[annotatorTone] += 1.0 / nAnnotators;
+            }
+            MultinomialDistribution multinomialDistribution = new MultinomialDistribution(annotationCounts, nTones);
+            int initialTone = multinomialDistribution.sample(rand);
+            articleTone.add(initialTone);
+        }
+
+        // initialize timeFrames as the mean of the corresponding articles (+ global mean)
         timeFramesReals = new ArrayList<>();
         timeFramesCube = new ArrayList<>();
+        timeToneReals = new ArrayList<>();
+        timeToneSimplex = new ArrayList<>();
+
         for (int t = 0; t < nTimes; t++) {
-            double timeMean[] = new double[nLabels];
-            double timeMeanReals[] = new double[nLabels];
+            double timeFramesMean[] = new double[nLabels];
+            double timeFramesMeanReals[] = new double[nLabels];
             // initialize everything with the global mean
-            ArrayList<Integer> articles = timeArticles.get(t);
-            double nTimeArticles = (double) articles.size();
-            for (int k = 0; k < nLabels; k++) {
-                timeMean[k] += framesMean[k] / (nTimeArticles + 1);
+            ArrayList<Integer> articles = timeFramingArticles.get(t);
+            double nTimeFramingArticles = (double) articles.size();
+            for (int j = 0; j < nLabels; j++) {
+                timeFramesMean[j] += framesMean[j] / (nTimeFramingArticles + 1);
             }
             for (int i : articles) {
                 int frames[] = articleFrames.get(i);
-                for (int k = 0; k < nLabels; k++) {
-                    timeMean[k] += (double) frames[k] / (nTimeArticles + 1);
+                for (int j = 0; j < nLabels; j++) {
+                    timeFramesMean[j] += (double) frames[j] / (nTimeFramingArticles + 1);
                 }
             }
 
-            for (int k = 0; k < nLabels; k++) {
-                //timeMean[k] = 1.0 / (double) nLabels;
-                timeMeanReals[k] = Math.log(-Math.log(timeMean[k]));
+            for (int j = 0; j < nLabels; j++) {
+                timeFramesMeanReals[j] = Math.log(-Math.log(timeFramesMean[j]));
             }
-            timeFramesCube.add(timeMean);
-            timeFramesReals.add(timeMeanReals);
+            timeFramesCube.add(timeFramesMean);
+            timeFramesReals.add(timeFramesMeanReals);
+
+            double timeTonesMeanSimplex[] = new double[nTones];
+
+            // initialize everything with the global mean
+            articles = timeToneArticles.get(t);
+            double nTimeToneArticles = (double) articles.size();
+            for (int j = 0; j < nTones; j++) {
+                timeTonesMeanSimplex[j] += tonesMean[j] / (nTimeToneArticles + 1);
+            }
+            for (int i : articles) {
+                int tone = articleTone.get(i);
+                timeTonesMeanSimplex[tone] += 1.0 / (nTimeToneArticles + 1);
+            }
+
+            double timeTonesMeanReals[] = Transformations.simplexToReals(timeTonesMeanSimplex, nTones);
+
+            timeToneSimplex.add(timeTonesMeanSimplex);
+            timeToneReals.add(timeTonesMeanReals);
+
         }
 
         System.out.println("");
 
         // initialize annotator parameters to reasonable values
-        sens = new double[nAnnotators][nLabels];
-        spec = new double[nAnnotators][nLabels];
-        for (int j = 0; j < nAnnotators; j++) {
-            for (int k = 0; k < nLabels; k++) {
-                sens[j][k] = 0.7;
-                spec[j][k] = 0.7;
+        q = new double[nFramingAnnotators][nLabels];
+        r = new double[nFramingAnnotators][nLabels];
+        for (int k = 0; k < nFramingAnnotators; k++) {
+            for (int j = 0; j < nLabels; j++) {
+                q[k][j] = 0.8;
+                r[k][j] = 0.8;
             }
         }
+
+        s = new double[nToneAnnotators][nTones][nTones];
+        for (int k = 0; k < nToneAnnotators; k++) {
+            for (int j = 0; j < nTones; j++) {
+                for (int j2 = 0; j2 < nTones; j2++) {
+                    if (j == j2) {
+                        s[k][j][j2] = 0.8;
+                    } else {
+                        s[k][j][j2] = 0.1;
+                    }
+                }
+            }
+        }
+
+        // initialize weights
+        weights = new double[nFeatures];
+
     }
 
+    // TODO: store and save entropy (check if valid)....
     void run(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
         int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
 
         double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
-        int articleFrameSamples [][][] = new int[nSamples][nArticles][nLabels];
-        double sensSamples [][][] = new double[nSamples][nAnnotators][nLabels];
-        double specSamples [][][] = new double[nSamples][nAnnotators][nLabels];
+        double timeToneSamples [][][] = new double[nSamples][nTimes][nLabels];
+        double weightSamples [][] = new double[nSamples][nFeatures];
+        int articleFrameSamples [][][] = new int[nSamples][nArticlesWithFraming][nLabels];
+        int articleToneSamples [][] = new int[nSamples][nArticlesWithTone];
+        double qSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
+        double rSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
+        double sSamples [][][][] = new double[nSamples][nToneAnnotators][nTones][nTones];
 
         double timeFrameRate = 0.0;
+        double timeTonesRate = 0.0;
+        double [] weightRate = new double[nFeatures];
         double articleFramesRate = 0;
         double sensRate = 0;
         double specRate = 0;
-        int s = 0;
+        int sample = 0;
         int i = 0;
-        while (s < nSamples) {
+        while (sample < nSamples) {
+            double [] acceptances = sampleWeights();
             timeFrameRate += sampleTimeFrames();
-            articleFramesRate += sampleArticleFrames();
+            timeTonesRate += sampleTimeTones();
+            for (int f = 0; f < nFeatures; f++) {
+                weightRate[f] += (double) acceptances[f] / nIter;
+            }
+            //articleFramesRate += sampleArticleFrames();
 
             // Not so bad to have one per annotator, but still seems to be better without
             // Also, high rejection rates for these... try Guassians?
-            sensRate += sampleSens();
-            specRate += sampleSpec();
+            //sensRate += sampleSens();
+            //specRate += sampleSpec();
 
             globalMean = recomputeGlobalMean();
 
             // save samples
+
             if (i > burnIn && i % samplingPeriod == 0) {
                 for (int t = 0; t < nTimes; t++) {
-                    System.arraycopy(timeFramesCube.get(t), 0, timeFrameSamples[s][t], 0, nLabels);
+                    System.arraycopy(timeFramesCube.get(t), 0, timeFrameSamples[sample][t], 0, nLabels);
                 }
+                for (int t = 0; t < nTimes; t++) {
+                    System.arraycopy(timeToneSimplex.get(t), 0, timeToneSamples[sample][t], 0, nTones);
+                }
+                for (int f = 0; f < nFeatures; f++) {
+                    System.arraycopy(weights, 0, weightSamples[sample], 0, nFeatures);
+                }
+                /*
                 for (int a = 0; a < nArticles; a++) {
                     System.arraycopy(articleFrames.get(a), 0, articleFrameSamples[s][a], 0, nLabels);
                 }
                 for (int j = 0; j < nAnnotators; j++) {
                     System.arraycopy(sens[j], 0, sensSamples[s][j], 0, nLabels);
                     System.arraycopy(spec[j], 0, specSamples[s][j], 0, nLabels);
-                }
-                s += 1;
+                }*/
+
+                sample += 1;
             }
+
             i += 1;
             if (i % printPeriod == 0) {
                 System.out.print(i + ": ");
-                for (int k = 0; k < nLabels; k++) {
-                    System.out.print(globalMean[k] + " ");
+                for (int f = 0; f < nFeatures; f++) {
+                    System.out.print(weights[f] + " ");
                 }
-                System.out.println("");
+                //for (int k = 0; k < nLabels; k++) {
+                //    System.out.print(globalMean[k] + " ");
+                //}
+                System.out.print("\n");
             }
+
         }
 
         System.out.println(timeFrameRate / nIter);
+        System.out.println(timeTonesRate / nIter);
+        System.out.println("weight rates");
+        for (int f = 0; f < nFeatures; f++) {
+            System.out.println(weightRate[f]);
+        }
         System.out.println(articleFramesRate/ nIter);
         System.out.println(sensRate / nIter);
         System.out.println(specRate / nIter);
 
         // save results
-
         Path output_path;
         for (int k = 0; k < nLabels; k++) {
             output_path = Paths.get("samples", "timeFramesSamples" + k + ".csv");
             try (FileWriter file = new FileWriter(output_path.toString())) {
-                for (s = 0; s < nSamples; s++) {
+                for (sample = 0; sample < nSamples; sample++) {
                     for (int t = 0; t < nTimes; t++) {
-                        file.write(timeFrameSamples[s][t][k] + ",");
+                        file.write(timeFrameSamples[sample][t][k] + ",");
                     }
                     file.write("\n");
                 }
             }
         }
 
+        for (int k = 0; k < nTones; k++) {
+            output_path = Paths.get("samples", "timeToneSamples" + k + ".csv");
+            try (FileWriter file = new FileWriter(output_path.toString())) {
+                for (sample = 0; sample < nSamples; sample++) {
+                    for (int t = 0; t < nTimes; t++) {
+                        file.write(timeToneSamples[sample][t][k] + ",");
+                    }
+                    file.write("\n");
+                }
+            }
+        }
+
+        output_path = Paths.get("samples", "weightSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                for (int f = 0; f < nFeatures; f++) {
+                    file.write(weightSamples[sample][f] + ",");
+                }
+                file.write("\n");
+            }
+        }
+
+
+        /*
         for (int k = 0; k < nLabels; k++) {
             output_path = Paths.get("samples", "sensSamples" + k + ".csv");
             try (FileWriter file = new FileWriter(output_path.toString())) {
-                for (s = 0; s < nSamples; s++) {
+                for (sample = 0; sample < nSamples; sample++) {
                     for (int j = 0; j < nAnnotators; j++) {
-                        file.write(sensSamples[s][j][k] + ",");
+                        file.write(sensSamples[sample][j][k] + ",");
                     }
                     file.write("\n");
                 }
@@ -499,6 +846,7 @@ public class Sampler {
                 }
             }
         }
+        */
 
         /*
         output_path = Paths.get("samples", "sensSamples.csv");
@@ -563,8 +911,38 @@ public class Sampler {
             }
         }
         */
+    }
 
+    private double[] computeFeatureVector(int time, double [] toneProbs, double [] framingProbs) {
+        double featureVector[] = new double[nFeatures];
+        featureVector[0] = 1;                                    // intercept
+        if (time > 0) {
+            featureVector[1] = mood[time - 1];                   // mood at t-1
+        }
+        featureVector[2] = nArticlesAtTime[time];                // number of articles published in time t
+        featureVector[3] = toneProbs[0] - toneProbs[2];  // net tone at time t
+        featureVector[4] = featureVector[2] * featureVector[3];  // interaction
+        featureVector[5] = computeEntropy(framingProbs);                 // entropy
+        featureVector[6] = featureVector[2] * featureVector[5];  // intercept
 
+        return featureVector;
+    }
+
+    private double computeEntropy(double [] framingProbs) {
+        double entropy = 0;
+        for (int j = 0; j < nLabels; j++) {
+            entropy -= framingProbs[j] * Math.log(framingProbs[j]);
+        }
+        return entropy;
+    }
+
+    private double computeLogProbMood(double [] featureVector, double [] weights, double mood, double moodSigma) {
+        double mean = 0;
+        for (int f = 0; f < nFeatures; f++) {
+            mean += weights[f] * featureVector[f];
+        }
+        NormalDistribution currentMoodDist = new NormalDistribution(mean, moodSigma);
+        return Math.log(currentMoodDist.density(mood));
     }
 
 
@@ -589,7 +967,7 @@ public class Sampler {
             }
             MultivariateNormalDistribution normDist = new MultivariateNormalDistribution(mean, covariance);
             double normalStep[] = normDist.sample();
-            double step = rand.nextGaussian() * mhTimeStepSigma;
+            double step = rand.nextGaussian() * mhTimeFramesStepSigma;
 
             // apply the step to generate a proposal
             for (int k = 0; k < nLabels; k++) {
@@ -597,25 +975,23 @@ public class Sampler {
             }
 
             // transform the proposal to the cube
-            double proposalCube[] = realsToCube(proposalReals, nLabels);
+            double proposalCube[] = Transformations.realsToCube(proposalReals, nLabels);
 
             // get the distribution over frames at the previous time point
-            double previousCube[];
             double previousReals[];
             if (t > 0) {
-                previousCube = timeFramesCube.get(t-1);
                 previousReals = timeFramesReals.get(t-1);
             } else {
                 // if t == 0, use the global mean
-                previousCube = new double[nLabels];
+                double [] previousCube = new double[nLabels];
                 System.arraycopy(framesMean, 0, previousCube, 0, nLabels);
-                previousReals = cubeToReals(previousCube, nLabels);
+                previousReals = Transformations.cubeToReals(previousCube, nLabels);
             }
 
             // compute a distribution over the current time point given previous
             double priorCovariance[][] = new double[nLabels][nLabels];
             for (int k = 0; k < nLabels; k++) {
-                priorCovariance[k][k] = timesRealSigma;
+                priorCovariance[k][k] = timeFramesRealSigma;
             }
 
             MultivariateNormalDistribution previousDist = new MultivariateNormalDistribution(previousReals, priorCovariance);
@@ -636,7 +1012,7 @@ public class Sampler {
             }
 
             // compute the probability of the article distributions for both current and proposal
-            ArrayList<Integer> articles = timeArticles.get(t);
+            ArrayList<Integer> articles = timeFramingArticles.get(t);
             for (int i : articles) {
                 int articleLabels[] = articleFrames.get(i);
                 for (int k = 0; k < nLabels; k++) {
@@ -644,6 +1020,13 @@ public class Sampler {
                     pLogProposal += articleLabels[k] * Math.log(proposalCube[k]) + (1-articleLabels[k]) * Math.log(1-proposalCube[k]);
                 }
             }
+
+            // compute probabilities of mood for current and proposed latent framing probs
+            double currentVector[] = computeFeatureVector(t, timeToneSimplex.get(t), currentCube);
+            double proposalVector[] = computeFeatureVector(t, timeToneSimplex.get(t), proposalCube);
+
+            pLogCurrent += computeLogProbMood(currentVector, weights, mood[t], moodSigma);
+            pLogProposal += computeLogProbMood(proposalVector, weights, mood[t], moodSigma);
 
             double a = Math.exp(pLogProposal - pLogCurrent);
             double u = rand.nextDouble();
@@ -659,6 +1042,135 @@ public class Sampler {
     }
 
 
+    private double sampleTimeTones() {
+        // run the distribution over tones for the first time point
+
+        double nAccepted = 0;
+
+        // loop through all time points
+        for (int t = 0; t < nTimes; t++) {
+
+            // get the current distribution over tones
+            double currentSimplex[] = timeToneSimplex.get(t);
+            double currentReals[] = timeToneReals.get(t);
+            // create a variable for a proposal
+            double proposalReals[] = new double[nTones];
+
+            double mean[] = new double[nTones];
+            double covariance[][] = new double[nTones][nTones];
+            for (int k = 0; k < nTones; k++) {
+                covariance[k][k] = 1;
+            }
+            MultivariateNormalDistribution normDist = new MultivariateNormalDistribution(mean, covariance);
+            double normalStep[] = normDist.sample();
+            double step = rand.nextGaussian() * mhTimeToneStepSigma;
+
+            // apply the step to generate a proposal
+            for (int k = 0; k < nTones; k++) {
+                proposalReals[k] = currentReals[k] + normalStep[k] * step;
+            }
+
+            // transform the proposal to the simplex
+            double proposalSimplex[] = Transformations.realsToSimplex(proposalReals, nTones);
+
+            // get the distribution over tones at the previous time point
+            double previousReals[];
+            if (t > 0) {
+                previousReals = timeToneReals.get(t-1);
+            } else {
+                // if t == 0, use the global mean
+                double [] previousSimplex = new double[nTones];
+                System.arraycopy(tonesMean, 0, previousSimplex, 0, nTones);
+                previousReals = Transformations.simplexToReals(previousSimplex, nTones);
+            }
+
+            // compute a distribution over the current time point given previous
+            double priorCovariance[][] = new double[nTones][nTones];
+            for (int k = 0; k < nTones; k++) {
+                priorCovariance[k][k] = timeToneRealSigma;
+            }
+
+            MultivariateNormalDistribution previousDist = new MultivariateNormalDistribution(previousReals, priorCovariance);
+
+            double pLogCurrent = Math.log(previousDist.density(currentReals));
+            double pLogProposal = Math.log(previousDist.density(proposalReals));
+
+            // get the distribution over tones in the next time point
+            if (t < nTimes-1) {
+                double nextReals[] = timeToneReals.get(t+1);
+
+                // compute a distribution over a new distribution over tones for the current distribution
+                MultivariateNormalDistribution currentDist = new MultivariateNormalDistribution(currentReals, priorCovariance);
+                MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(proposalReals, priorCovariance);
+
+                pLogCurrent += Math.log(currentDist.density(nextReals));
+                pLogProposal += Math.log(proposalDist.density(nextReals));
+            }
+
+            // compute the probability of the article tones for both current and proposal
+            ArrayList<Integer> articles = timeToneArticles.get(t);
+            for (int i : articles) {
+                int iTone = articleTone.get(i);
+                pLogCurrent += Math.log(currentSimplex[iTone]);
+                pLogProposal += Math.log(proposalSimplex[iTone]);
+            }
+
+            // compute probabilities of mood for current and proposed latent framing probs
+            double currentVector[] = computeFeatureVector(t, currentSimplex, timeFramesCube.get(t));
+            double proposalVector[] = computeFeatureVector(t, proposalSimplex, timeFramesCube.get(t));
+
+            pLogCurrent += computeLogProbMood(currentVector, weights, mood[t], moodSigma);
+            pLogProposal += computeLogProbMood(proposalVector, weights, mood[t], moodSigma);
+
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                timeToneSimplex.set(t, proposalSimplex);
+                timeToneReals.set(t, proposalReals);
+                nAccepted += 1;
+            }
+
+        }
+        return nAccepted / nTimes;
+    }
+
+
+    private double [] sampleWeights() {
+        double [] nAccepted = new double[nFeatures];
+
+        for (int f = 0; f < nFeatures; f++) {
+            double [] current = new double[nFeatures];
+            double [] proposal = new double[nFeatures];
+            System.arraycopy(weights, 0, current, 0, nFeatures);
+            System.arraycopy(weights, 0, proposal, 0, nFeatures);
+
+            double currentVal = current[f];
+            double proposalVal = currentVal + rand.nextGaussian() * mhWeightsStepSigma[f];
+            proposal[f] = proposalVal;
+
+            NormalDistribution prior = new NormalDistribution(0, weightSigma);
+            double pLogCurrent = Math.log(prior.density(currentVal));
+            double pLogProposal = Math.log(prior.density(proposalVal));
+
+            for (int t = 0; t < nTimes; t++) {
+                double [] featureVector = computeFeatureVector(t, timeToneSimplex.get(t), timeFramesCube.get(t));
+                pLogCurrent += computeLogProbMood(featureVector, current, mood[t], moodSigma);
+                pLogProposal += computeLogProbMood(featureVector, proposal, mood[t], moodSigma);
+            }
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                weights[f] = proposalVal;
+                nAccepted[f] += 1;
+            }
+
+        }
+        return nAccepted;
+    }
+
+    /*
     private double sampleArticleFrames() {
         double nAccepted = 0;
 
@@ -716,7 +1228,7 @@ public class Sampler {
                 double currentReal = Math.log(-Math.log(current));
 
                 NormalDistribution normDist = new NormalDistribution(0, mhSensSigma);
-                double proposalReal = currentReal + normDist.sample();
+                double proposalReal = currentReal + normDist.run();
                 double proposal = Math.exp(-Math.exp(proposalReal));
 
                 BetaDistribution sensPrior = new BetaDistribution(2.0, 2.0/0.75 - 2.0);
@@ -767,7 +1279,7 @@ public class Sampler {
                 double currentReal = Math.log(-Math.log(current));
 
                 NormalDistribution normDist = new NormalDistribution(0, mhSpecSigma);
-                double proposalReal = currentReal + normDist.sample();
+                double proposalReal = currentReal + normDist.run();
                 double proposal = Math.exp(-Math.exp(proposalReal));
 
                 BetaDistribution sensPrior = new BetaDistribution(2.0, 2.0/0.75 - 2.0);
@@ -904,11 +1416,10 @@ public class Sampler {
     }
     */
 
-
     private double[] recomputeGlobalMean() {
         double mean[] = new double[nLabels];
         // loop through all articles
-        for (int i = 0; i < nArticles; i++) {
+        for (int i = 0; i < nArticlesWithFraming; i++) {
             // get the current article dist
             int articleLabels[] = articleFrames.get(i);
             for (int k = 0; k < nLabels; k++) {
@@ -916,25 +1427,9 @@ public class Sampler {
             }
         }
         for (int k = 0; k < nLabels; k++) {
-            mean[k] = mean[k] / (double) nArticles;
+            mean[k] = mean[k] / (double) nArticlesWithFraming;
         }
         return mean;
-    }
-
-    private double[] cubeToReals(double p[], int size) {
-        double reals[] = new double[size];
-        for (int k = 0; k < size; k++) {
-            reals[k] = Math.log(-Math.log(p[k]));
-        }
-        return reals;
-    }
-
-    private double[] realsToCube(double r[], int size) {
-        double cube[] = new double[size];
-        for (int k = 0; k < size; k++) {
-            cube[k] = Math.exp(-Math.exp(r[k]));
-        }
-        return cube;
     }
 
 
@@ -1081,9 +1576,7 @@ public class Sampler {
         }
         return nAccepted / nTimes;
     }
-
-
-
-
     */
+
+
 }

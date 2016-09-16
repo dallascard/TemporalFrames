@@ -430,7 +430,7 @@ public class SamplerOld {
         }
     }
 
-    void sample(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
+    void run(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
         int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
 
         double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
@@ -496,7 +496,7 @@ public class SamplerOld {
 
         Path output_path;
         for (int k = 0; k < nLabels; k++) {
-            output_path = Paths.get("timeFramesSamples" + k + ".csv");
+            output_path = Paths.get("samples", "timeFramesSamples" + k + ".csv");
             try (FileWriter file = new FileWriter(output_path.toString())) {
                 for (s = 0; s < nSamples; s++) {
                     for (int t = 0; t < nTimes; t++) {
@@ -507,7 +507,7 @@ public class SamplerOld {
             }
         }
 
-        output_path = Paths.get("betaSamples.csv");
+        output_path = Paths.get("samples", "betaSamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (s=0; s < nSamples; s++) {
                 for (int t = 0; t < nTimes; t++) {
@@ -517,7 +517,7 @@ public class SamplerOld {
             }
         }
 
-        output_path = Paths.get("zealSamples.csv");
+        output_path = Paths.get("samples", "zealSamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (s = 0; s < nSamples; s++) {
                 for (int j = 0; j < nAnnotators; j++) {
@@ -527,7 +527,7 @@ public class SamplerOld {
             }
         }
 
-        output_path = Paths.get("biasSamples.csv");
+        output_path = Paths.get("samples", "biasSamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (s = 0; s < nSamples; s++) {
                 for (int j = 0; j < nAnnotators; j++) {
@@ -538,7 +538,7 @@ public class SamplerOld {
         }
 
         for (int k = 0; k < nLabels; k++) {
-            output_path = Paths.get("articleSamples" + k + ".csv");
+            output_path = Paths.get("samples", "articleSamples" + k + ".csv");
             try (FileWriter file = new FileWriter(output_path.toString())) {
                 for (s = 0; s < nSamples; s++) {
                     for (int a = 0; a < nArticles; a++) {
@@ -551,7 +551,7 @@ public class SamplerOld {
 
         // What I actually want is maybe the annotation probabilities (?)
 
-        output_path = Paths.get("articleMeans.csv");
+        output_path = Paths.get("samples", "articleMeans.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (int a = 0; a < nArticles; a++) {
                 double mean [] = new double[nLabels];
@@ -569,7 +569,7 @@ public class SamplerOld {
         }
 
         for (int k = 0; k < nLabels; k++) {
-            output_path = Paths.get("articleProbs" + k + ".csv");
+            output_path = Paths.get("samples", "articleProbs" + k + ".csv");
             try (FileWriter file = new FileWriter(output_path.toString())) {
                 for (s = 0; s < nSamples; s++) {
                     for (int a = 0; a < nArticles; a++) {
@@ -585,7 +585,7 @@ public class SamplerOld {
     }
 
     private double sampleTimeFrames() {
-        // sample the distribution over frames for the first time point
+        // run the distribution over frames for the first time point
 
         double nAccepted = 0;
 
@@ -869,7 +869,7 @@ public class SamplerOld {
             double current = zeal[annotator];
 
             //GammaDistribution proposalDist = new GammaDistribution(current+1, 1.0);
-            //double proposal = proposalDist.sample();
+            //double proposal = proposalDist.run();
             //double mhpProposal = proposalDist.density(proposal);
 
             //GammaDistribution reverseDist = new GammaDistribution(proposal+1, 1.0);
@@ -918,7 +918,7 @@ public class SamplerOld {
             double current = zeal[annotator];
 
             //GammaDistribution proposalDist = new GammaDistribution(current+1, 1.0);
-            //double proposal = proposalDist.sample();
+            //double proposal = proposalDist.run();
             //double mhpProposal = proposalDist.density(proposal);
 
             //GammaDistribution reverseDist = new GammaDistribution(proposal+1, 1.0);
@@ -968,7 +968,7 @@ public class SamplerOld {
             double current = bias[annotator];
             // create a variable for a proposal
             //GammaDistribution proposalDist = new GammaDistribution(current, 1.0);
-            //double proposal = proposalDist.sample();
+            //double proposal = proposalDist.run();
             //double mhpProposal = proposalDist.density(proposal);
 
             //GammaDistribution reverseDist = new GammaDistribution(proposal, 1.0);
