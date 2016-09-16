@@ -79,7 +79,8 @@
 \item $x_6 = x_2 \cdot x_5$
 \end{itemize}
 \item $z_{ij} = \textrm{Bernoulli}(F_{t_i j})$
-\item (!) $q_{jk} \sim U[0.5, 1]$
+\item (!) $\mu_{qj} = 
+\item (!) $q_{jk} \sim \textrm{Beta}(\alpha_{qj}, \beta_{qj})$
 \item (!) $r_{jk} \sim U[0.5, 1]$
 \item $y_{ijk} = \textrm{Bernoulli}\left( q_{jk} \cdot \mathbb{I}[{z_{ij}}=1] + (1-r_{jk}) \cdot \mathbb{I}[z_{ij} = 0]\right)$
 \item $v_{i} = \textrm{Multinomial}(T_{t_i})$
@@ -168,16 +169,25 @@ p(s_{kl} &| \{v_i, u_{ik}\}_{i \in I_k}) \\
 \item Sampling $w$:
 \end{itemize}
 \begin{align*}
-p(w_{h}
+p(w_{f} &| \{m_t, m_{t-1}, \theta_t, \phi_t, n_t\}_{t=1}^N, \sigma_w, \sigma_m) \\
+&\propto p(w_f | \sigma_w) \prod_{t=1}^N p(m_t  | m_{t-1}, \theta_t, \phi_t, n_t, w, \sigma_m) \\
+&= \mathcal{N}(w_f ; 0, \sigma_w^2) \prod_{t=1}^N \mathcal{N}(m_t ; w \cdot x , \sigma_m^2)
 \end{align*}
 
+\begin{itemize}
+\item Sampling $q$:
+\end{itemize}
+\begin{align*}
+p(q_{jk} 
+\end{align*}
 
 \section{Improvements}
 
 
 \begin{itemize}
 \item Use the probabilities from the classifiers, not the predictions, possibly generating probabilities as a mixture of Betas(?)
-\item Better priors for sigmas and hierarchical priors for sensitivity and specificities
+\item Better priors for sigmas (?)
+\item Better (hierarchical?) priors for q, r and s
 \item Better modeling of temporal dynamics
 \item Newspaper-specific transformations of latent spaces (?); tendency to take a biased step in a latent space (?)
 \end{itemize}

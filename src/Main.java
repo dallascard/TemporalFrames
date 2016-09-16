@@ -10,7 +10,7 @@ public class Main {
         //Sampler sampler = new Sampler(documents, metadata, predictions);
         CombinedModel sampler = new CombinedModel(documents, metadata, predictionsWithTone, mood);
 
-        sampler.run(3000, 2000, 10, 100);
+        sampler.run(4000, 3000, 10, 100);
 
     }
 }
