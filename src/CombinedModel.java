@@ -70,8 +70,8 @@ public class CombinedModel {
     private double[][][] sReal;
     private double[] weights;
 
-    private static double q_mu = 0.75;
-    private static double q_gamma = 1.5;
+    private double mu_q = 0.667;
+    private double gamma_q = 1.5;
 
     private double[] framesMean;
     private double[] tonesMean;
@@ -917,7 +917,7 @@ public class CombinedModel {
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (sample = 0; sample < nSamples; sample++) {
                 for (int t = 0; t < nTimes; t++) {
-                    file.write(timeFrameSamples[sample][t] + ",");
+                    file.write(entropySamples[sample][t] + ",");
                 }
                 file.write("\n");
             }
@@ -1379,7 +1379,9 @@ public class CombinedModel {
                 double a;
                 if (proposal > 0 && proposal < 1) {
                     // using somewhat strong beta prior for now
-                    BetaDistribution prior = new BetaDistribution(q_mu * q_gamma / (1 - q_mu), q_gamma);
+                    double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
+                    double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+                    BetaDistribution prior = new BetaDistribution(alpha, beta);
                     double pLogCurrent = prior.density(current);
                     double pLogProposal = prior.density(proposal);
                     for (int article : articles) {
@@ -1431,7 +1433,11 @@ public class CombinedModel {
                 double a;
                 if (proposal > 0 && proposal < 1) {
                     // using somewhat strong beta prior for now
-                    BetaDistribution prior = new BetaDistribution(q_mu * q_gamma / (1 - q_mu), q_gamma);
+                    //BetaDistribution prior = new BetaDistribution(q_mu * q_gamma / (1 - q_mu), q_gamma);
+                    double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
+                    double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+                    BetaDistribution prior = new BetaDistribution(alpha, beta);
+
                     double pLogCurrent = prior.density(current);
                     double pLogProposal = prior.density(proposal);
 

@@ -1,3 +1,4 @@
+import java.util.concurrent.ConcurrentHashMap;
 
 class Transformations {
 
@@ -39,5 +40,22 @@ class Transformations {
         return cube;
     }
 
+    static double betaMuGammaToAlpha(double mu, double gamma) {
+        if (mu >= 0.5) {
+            return gamma;
+        }
+        else {
+            return mu * gamma / (1 - mu);
+        }
+    }
+
+    static double betaMuGammaToBeta(double mu, double gamma) {
+        if (mu >= 0.5) {
+            return gamma * (1-mu) / mu;
+        }
+        else {
+            return gamma;
+        }
+    }
 
 }
