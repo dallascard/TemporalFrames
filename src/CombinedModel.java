@@ -491,6 +491,16 @@ public class CombinedModel {
         //Do not forget to close the scanner
         scanner.close();
 
+        // save mood data
+        Path output_path;
+        output_path = Paths.get("samples", "mood.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (int t = 0; t < nTimes; t++) {
+                file.write(mood[t] + ",");
+            }
+        }
+
+
         // display mood data
         /*
         for (int t = 0; t < nTimes; t++) {
