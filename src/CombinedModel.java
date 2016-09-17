@@ -85,9 +85,10 @@ public class CombinedModel {
     private double weightSigma = 10.0;
     private double moodSigma = 1.0;
 
-    private static double mhTimeFramesStepSigma = 0.1 ;
+    // Metropolis-Hastings step parameters
+    private static double mhTimeFramesStepSigma = 0.05 ;
     private static double mhTimeToneStepSigma = 0.1 ;
-    private static double [] mhWeightsStepSigma = {0.5, 1.0, 1.0, 1.0, 1.0, 0.1, 0.5};
+    private static double [] mhWeightsStepSigma = {0.25, 1.0, 1.0, 1.0, 2.0, 0.05, 0.25};
     private static double mhQSigma = 0.05;
     private static double mhRSigma = 0.05;
     private static double mhSSigma = 0.05;
@@ -149,7 +150,7 @@ public class CombinedModel {
             nMax = Math.max(nMax, nArticlesAtTime[t]);
         }
         for (int t = 0; t < nTimes; t++) {
-            nArticlesAtTime[t] /= nMax;
+            nArticlesAtTime[t] = nArticlesAtTime[t] / nMax;
         }
 
         // intialize some empty arrays
@@ -730,7 +731,7 @@ public class CombinedModel {
 
     }
 
-    // TODO: store and save entropy (check if valid)....
+    // TODO: compute and store predicted mood at each iteration
 
     void run(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
         int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
@@ -744,6 +745,7 @@ public class CombinedModel {
         double rSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
         double sSamples [][][][] = new double[nSamples][nToneAnnotators][nTones][nTones];
         double entropySamples [][] = new double[nSamples][nTimes];
+        double moodSamples[][] = new double[nSamples][nTimes];
 
         double timeFrameRate = 0.0;
         double articleFramesRate = 0;
@@ -816,6 +818,15 @@ public class CombinedModel {
                 }
                 System.arraycopy(timeEntropy, 0, entropySamples[sample], 0, nTimes);
 
+                for (int t = 0; t < nTimes; t++) {
+                    double [] featureVector = computeFeatureVector(t, timeToneSimplex.get(t), timeEntropy[t]);
+                    double moodMean = 0.0;
+                    for (int f = 0; f < nFeatures; f++) {
+                        moodMean += featureVector[f] * weights[f];
+                    }
+                    moodSamples[sample][t] = moodMean;
+                }
+
                 sample += 1;
             }
 
@@ -833,6 +844,7 @@ public class CombinedModel {
 
         }
 
+        // Display acceptance rates
         System.out.println(timeFrameRate / i);
         System.out.println(timeTonesRate / i);
         System.out.println("weight rates");
@@ -947,6 +959,15 @@ public class CombinedModel {
             }
         }
 
+        output_path = Paths.get("samples", "moodSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                for (int t = 0; t < nTimes; t++) {
+                    file.write(moodSamples[sample][t] + ",");
+                }
+                file.write("\n");
+            }
+        }
 
         // What I actually want is maybe the annotation probabilities (?)
 
@@ -1453,7 +1474,7 @@ public class CombinedModel {
 
                 // using pretty strong Dirichlet prior for now
                 double alpha[] = {1.0, 1.0, 1.0};
-                alpha[l] = 2.0;
+                alpha[l] = 1.5;
                 DirichletDist prior = new DirichletDist(alpha);
 
                 // using uniform prior for the moment
