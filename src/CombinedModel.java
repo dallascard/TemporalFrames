@@ -98,7 +98,8 @@ public class CombinedModel {
     private static RandomStream randomStream = new MRG32k3a();
     private static Sigmoid sigmoid = new Sigmoid();
 
-    public CombinedModel(String inputFilename, String metadataFilename, String predictionsFilename, String moodFilename) throws Exception {
+    public CombinedModel(String inputFilename, String metadataFilename, String predictionsFilename, String moodFilename,
+                         boolean normalizeStoriesAtTime) throws Exception {
 
         Path inputPath = Paths.get(inputFilename);
         JSONParser parser = new JSONParser();
@@ -145,12 +146,15 @@ public class CombinedModel {
         for (int time : articleNameTime.values()) {
             nArticlesAtTime[time] += 1;
         }
+        // normalize nArticles
         double nMax = 0;
         for (int t = 0; t < nTimes; t++) {
             nMax = Math.max(nMax, nArticlesAtTime[t]);
         }
-        for (int t = 0; t < nTimes; t++) {
-            nArticlesAtTime[t] = nArticlesAtTime[t] / nMax;
+        if (normalizeStoriesAtTime) {
+            for (int t = 0; t < nTimes; t++) {
+                nArticlesAtTime[t] = nArticlesAtTime[t] / nMax;
+            }
         }
 
         // intialize some empty arrays
@@ -769,7 +773,6 @@ public class CombinedModel {
 
     }
 
-    // TODO: compute and store predicted mood at each iteration
 
     void run(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
         int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
@@ -1062,7 +1065,7 @@ public class CombinedModel {
     private double computeEntropy(double [] framingProbs) {
         double entropy = 0;
         for (int j = 0; j < nLabels; j++) {
-            entropy -= framingProbs[j] * Math.log(framingProbs[j]);
+            entropy -= framingProbs[j] * Math.log(framingProbs[j]) - (1-framingProbs[j]) * Math.log(1-framingProbs[j]);
         }
         return entropy;
     }
