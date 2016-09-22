@@ -40,7 +40,7 @@ public class Main {
 
         CombinedModel sampler = new CombinedModel(documents, metadata, predictions, mood, false, false);
 
-        sampler.run(4000, 3000, 10, 100);
+        sampler.run(6000, 4000, 10, 100);
 
     }
 }
