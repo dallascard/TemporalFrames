@@ -1,16 +1,10 @@
-import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
-import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.nio.file.Path;
 import java.util.*;
 
-import com.oracle.javafx.jmx.json.JSONDocument;
 import org.apache.commons.math3.distribution.GammaDistribution;
-import org.apache.commons.math3.linear.ArrayRealVector;
-import org.apache.commons.math3.special.Gamma;
-import org.apache.commons.math3.stat.ranking.NaturalRanking;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -19,10 +13,6 @@ import umontreal.ssj.randvarmulti.DirichletGen;
 import umontreal.ssj.probdistmulti.DirichletDist;
 import umontreal.ssj.rng.*;
 
-import org.ejml.data.DenseMatrix64F;
-import org.ejml.ops.CommonOps;
-
-import org.apache.commons.math3.distribution.MultivariateNormalDistribution;
 import org.apache.commons.math3.distribution.NormalDistribution;
 import org.apache.commons.math3.analysis.function.Sigmoid;
 
