@@ -82,7 +82,7 @@ public class CombinedModel {
 
     private double timeFramesRealSigma = 0.01;
     private double timeToneRealSigma = 0.01;
-    private double weightSigma = 1.0;
+    private double weightSigma = 100.0;
     private double moodSigma = 1.0;
 
     // Metropolis-Hastings step parameters
@@ -99,7 +99,7 @@ public class CombinedModel {
     private static Sigmoid sigmoid = new Sigmoid();
 
     public CombinedModel(String inputFilename, String metadataFilename, String predictionsFilename, String moodFilename,
-                         boolean normalizeStoriesAtTime) throws Exception {
+                         boolean normalizeStoriesAtTime, boolean normalizeMood) throws Exception {
 
         Path inputPath = Paths.get(inputFilename);
         JSONParser parser = new JSONParser();
@@ -506,8 +506,13 @@ public class CombinedModel {
                 quarter = Integer.parseInt(next)-1;
             }
             else if (j == 3) {
-                // normalize mood to be in the range (-1, 1)
-                moodVal = (Double.parseDouble(next) - 50) / 50.0;
+                if (normalizeMood) {
+                    // normalize mood to be in the range (-1, 1)
+                    moodVal = (Double.parseDouble(next) - 50) / 50.0;
+                } else {
+                    moodVal = Double.parseDouble(next);
+                }
+
             }
             else if (j == 5) {
                 int time = yearAndQuarterToTime(year, quarter);
