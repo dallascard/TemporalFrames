@@ -7,10 +7,10 @@ public class Main {
         HashMap<String, String> params = new HashMap<>();
 
         // set defaults
-        params.put("-d", "/Users/dcard/Documents/Mercurial/compuframes-coding/tools/annotations/immigration/documents.json");   // documents.json
-        params.put("-m", "/Users/dcard/Dropbox/CMU/ARK/compuframes/data/metadata/immigration/summary.json");                    // metadata summary.json
-        params.put("-p", "/Users/dcard/Desktop/uncorrected_with_tone.csv");                                                     // n_personas
-        params.put("-x", "/Users/dcard/Dropbox/CMU/ARK/compuframes/Analysis/Amber/data/quarter_smoothed_dummy.csv");            // mood: quarter_smoothed_dummy.csv
+        params.put("-d", "input/documents.json");   // documents.json
+        params.put("-m", "input/summary.json");                    // metadata summary.json
+        params.put("-p", "input/uncorrected_with_tone.csv");                                                     // n_personas
+        params.put("-x", "input/quarter_smoothed_dummy.csv");            // mood: quarter_smoothed_dummy.csv
 
         String arg = null;
         for (String s: args) {
