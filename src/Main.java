@@ -38,7 +38,7 @@ public class Main {
         //Sampler sampler = new Sampler(documents, metadata, predictions);
 
 
-        CombinedModel sampler = new CombinedModel(documents, metadata, predictions, mood, false);
+        CombinedModel sampler = new CombinedModel(documents, metadata, predictions, mood, false, false);
 
         sampler.run(4000, 3000, 10, 100);
 
