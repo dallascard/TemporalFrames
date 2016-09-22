@@ -41,7 +41,7 @@ class Transformations {
     }
 
     static double betaMuGammaToAlpha(double mu, double gamma) {
-        if (mu >= 0.5) {
+        if (mu < 0.5) {
             return gamma;
         }
         else {
@@ -50,7 +50,7 @@ class Transformations {
     }
 
     static double betaMuGammaToBeta(double mu, double gamma) {
-        if (mu >= 0.5) {
+        if (mu < 0.5) {
             return gamma * (1-mu) / mu;
         }
         else {

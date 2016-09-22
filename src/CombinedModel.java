@@ -37,7 +37,7 @@ public class CombinedModel {
     private static int nMonthsPerQuarter = 3;
     private static int nFeatures = 7;
 
-    private Set<String> relevantArticles;
+    private Set<String> irrelevantArticles;
     private HashMap<String, Integer> newspaperIndices;
     private HashMap<String, Integer> articleNameTime;
     private HashMap<String, Integer> articleNameNewspaper;
@@ -82,7 +82,7 @@ public class CombinedModel {
 
     private double timeFramesRealSigma = 0.01;
     private double timeToneRealSigma = 0.01;
-    private double weightSigma = 10.0;
+    private double weightSigma = 1.0;
     private double moodSigma = 1.0;
 
     // Metropolis-Hastings step parameters
@@ -164,7 +164,7 @@ public class CombinedModel {
         }
 
         // determine the relevant articles based on annotations
-        relevantArticles = getRelevantArticles(data);
+        irrelevantArticles = getIrrelevantArticles(data);
 
         // index annotators
         Set<String> framingAnnotators = gatherFramingAnnotators(data);
@@ -210,7 +210,7 @@ public class CombinedModel {
         for (Object articleName : data.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName.toString())) {
-                if (relevantArticles.contains(articleName.toString())) {
+                if (!irrelevantArticles.contains(articleName.toString())) {
                     JSONObject article = (JSONObject) data.get(articleName);
                     JSONObject annotationsJson = (JSONObject) article.get("annotations");
                     JSONObject articleFramingAnnotations = (JSONObject) annotationsJson.get("framing");
@@ -339,45 +339,45 @@ public class CombinedModel {
         for (String articleName : framingPredictions.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName)) {
-                JSONObject article = (JSONObject) data.get(articleName);
-                if (framingArticleNames.contains(articleName)) {
-                    // add the prediction to the set of new annotations
-                    // get the article ID
-                    int i = framingArticleNames.indexOf(articleName);
-                    // create a hashmap to store the annotations for this article
-                    HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
-                    // treat predictions as coming from a separate annotator
-                    articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
-                    framingAnnotatorArticles.get(annotatorIndex).add(i);
-                    // store the annotations for this article
-                    framingAnnotations.set(i, articleAnnotations);
-                } else {
-                    // add information for a new article
-                    /*
-                    // get a new article id (i)
-                    int i = framingArticleNames.size();
-                    // store the article name for future reference
-                    framingArticleNames.add(articleName);
-                    // get the timestep for this article (by name)
-                    int time = articleNameTime.get(articleName);
-                    framingArticleTime.put(i, time);
-                    // get the newspaper for this article (by name)
-                    framingArticleNewspaper.put(i, articleNameNewspaper.get(articleName));
-                    // create a hashmap to store the annotations for this article
-                    HashMap<Integer, int[]> articleAnnotations = new HashMap<>();
-                    // treat predictions as coming from a separate anntoator
-                    // loop through this annotator's annotations
-                    articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
-                    // store the total number of annotations for each label
-                    framingAnnotatorArticles.get(annotatorIndex).add(i);
-                    for (int j = 0; j < nLabels; j++) {
-                        framesMean[j] += (double) framingPredictions.get(articleName)[j];
+                if (!irrelevantArticles.contains(articleName)) {
+                    //JSONObject article = (JSONObject) data.get(articleName);
+                    if (framingArticleNames.contains(articleName)) {
+                        // add the prediction to the set of new annotations
+                        // get the article ID
+                        int i = framingArticleNames.indexOf(articleName);
+                        // create a hashmap to store the annotations for this article
+                        HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
+                        // treat predictions as coming from a separate annotator
+                        articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
+                        framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        // store the annotations for this article
+                        framingAnnotations.set(i, articleAnnotations);
+                    } else {
+                        // add information for a new article
+                        // get a new article id (i)
+                        int i = framingArticleNames.size();
+                        // store the article name for future reference
+                        framingArticleNames.add(articleName);
+                        // get the timestep for this article (by name)
+                        int time = articleNameTime.get(articleName);
+                        framingArticleTime.put(i, time);
+                        // get the newspaper for this article (by name)
+                        framingArticleNewspaper.put(i, articleNameNewspaper.get(articleName));
+                        // create a hashmap to store the annotations for this article
+                        HashMap<Integer, int[]> articleAnnotations = new HashMap<>();
+                        // treat predictions as coming from a separate anntoator
+                        // loop through this annotator's annotations
+                        articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
+                        // store the total number of annotations for each label
+                        framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        //for (int j = 0; j < nLabels; j++) {
+                        //    framesMean[j] += (double) framingPredictions.get(articleName)[j];
+                        //}
+                        // store the annotations for this article
+                        framingAnnotations.add(articleAnnotations);
+                        timeFramingArticles.get(time).add(i);
+                        //framingCount += 1;
                     }
-                    // store the annotations for this article
-                    framingAnnotations.add(articleAnnotations);
-                    timeFramingArticles.get(time).add(i);
-                    framingCount += 1;
-                    */
                 }
             }
         }
@@ -415,16 +415,42 @@ public class CombinedModel {
         for (String articleName : tonePredictions.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName)) {
-                if (toneArticleNames.contains(articleName)) {
-                    // get the article ID
-                    int i = toneArticleNames.indexOf(articleName);
-                    // create a hashmap to store the annotations for this article
-                    HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
-                    // treat predictions as coming from a separate annotator
-                    articleAnnotations.put(annotatorIndex, tonePredictions.get(articleName));
-                    toneAnnotatorArticles.get(annotatorIndex).add(i);
-                    // store the annotations for this article
-                    toneAnnotations.set(i, articleAnnotations);
+                if (!irrelevantArticles.contains(articleName)) {
+                    if (toneArticleNames.contains(articleName)) {
+                        // get the article ID
+                        int i = toneArticleNames.indexOf(articleName);
+                        // create a hashmap to store the annotations for this article
+                        HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
+                        // treat predictions as coming from a separate annotator
+                        articleAnnotations.put(annotatorIndex, tonePredictions.get(articleName));
+                        toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        // store the annotations for this article
+                        toneAnnotations.set(i, articleAnnotations);
+                    } else {
+                        // add information for a new article
+                        // get a new article id (i)
+                        int i = toneArticleNames.size();
+                        // store the article name for future reference
+                        toneArticleNames.add(articleName);
+                        // get the timestep for this article (by name)
+                        int time = articleNameTime.get(articleName);
+                        toneArticleTime.put(i, time);
+                        // get the newspaper for this article (by name)
+                        toneArticleNewspaper.put(i, articleNameNewspaper.get(articleName));
+                        // create a hashmap to store the annotations for this article
+                        HashMap<Integer, Integer> articleAnnotations = new HashMap<>();
+                        // treat predictions as coming from a separate anntoator
+                        // loop through this annotator's annotations
+                        Integer tonePrediction = tonePredictions.get(articleName);
+                        articleAnnotations.put(annotatorIndex, tonePrediction);
+                        // store the total number of annotations for each label
+                        toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        //tonesMean[tonePrediction] += 1.0;
+                        // store the annotations for this article
+                        toneAnnotations.add(articleAnnotations);
+                        timeToneArticles.get(time).add(i);
+                        //toneCount += 1;
+                    }
                 }
             }
         }
@@ -548,8 +574,8 @@ public class CombinedModel {
         return newspapers;
     }
 
-    private Set<String> getRelevantArticles(JSONObject data) {
-        Set<String> relevantArticles = new HashSet<>();
+    private Set<String> getIrrelevantArticles(JSONObject data) {
+        Set<String> irrelevantArticles = new HashSet<>();
 
         for (Object articleName : data.keySet()) {
             // check if this article is in the list of valid articles
@@ -564,13 +590,15 @@ public class CombinedModel {
                         relevant = false;
                     }
                 }
-                if (relevant) {
-                    relevantArticles.add(articleName.toString());
+                if (!relevant) {
+                    irrelevantArticles.add(articleName.toString());
                 }
             }
         }
-        return relevantArticles;
+        return irrelevantArticles;
     }
+
+
 
     private Set<String> gatherFramingAnnotators(JSONObject data) {
         /*
@@ -581,7 +609,7 @@ public class CombinedModel {
         for (Object articleName : data.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName.toString())) {
-                if (relevantArticles.contains(articleName.toString())) {
+                if (!irrelevantArticles.contains(articleName.toString())) {
                     JSONObject article = (JSONObject) data.get(articleName);
                     JSONObject annotations = (JSONObject) article.get("annotations");
                     JSONObject framingAnnotations = (JSONObject) annotations.get("framing");
@@ -604,7 +632,7 @@ public class CombinedModel {
         for (Object articleName : data.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName.toString())) {
-                if (relevantArticles.contains(articleName.toString())) {
+                if (!irrelevantArticles.contains(articleName.toString())) {
                     JSONObject article = (JSONObject) data.get(articleName);
                     JSONObject annotations = (JSONObject) article.get("annotations");
                     JSONObject framingAnnotations = (JSONObject) annotations.get("tone");
@@ -1381,6 +1409,14 @@ public class CombinedModel {
                     // using somewhat strong beta prior for now
                     double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
                     double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+
+                    if (alpha < 1 || beta < 1) {
+                        System.out.println("Undesired beta parameters in Q");
+                        alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
+                        beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+                    }
+
+
                     BetaDistribution prior = new BetaDistribution(alpha, beta);
                     double pLogCurrent = prior.density(current);
                     double pLogProposal = prior.density(proposal);
@@ -1400,10 +1436,10 @@ public class CombinedModel {
                 }
 
                 if (Double.isNaN(a)) {
-                    System.out.println("NaN in Q");
+                    System.out.println("NaN in Q:" + current + " to " + proposal);
                 }
                 if (Double.isInfinite(a)) {
-                    System.out.println("Inf in Q");
+                    System.out.println("Inf in Q:" + current + " to " + proposal);
                 }
 
                 double u = rand.nextDouble();
@@ -1436,6 +1472,13 @@ public class CombinedModel {
                     //BetaDistribution prior = new BetaDistribution(q_mu * q_gamma / (1 - q_mu), q_gamma);
                     double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
                     double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+
+                    if (alpha < 1 || beta < 1) {
+                        System.out.println("Undesired beta parameters in R");
+                        alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
+                        beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+                    }
+
                     BetaDistribution prior = new BetaDistribution(alpha, beta);
 
                     double pLogCurrent = prior.density(current);
@@ -1453,10 +1496,10 @@ public class CombinedModel {
                     a = Math.exp(pLogProposal - pLogCurrent);
 
                     if (Double.isNaN(a)) {
-                        System.out.println("NaN in R");
+                        System.out.println("NaN in R:" + current + " to " + proposal);
                     }
                     if (Double.isInfinite(a)) {
-                        System.out.println("Inf in R");
+                        System.out.println("Inf in R:" + current + " to " + proposal);
                     }
                 }
                 else {
