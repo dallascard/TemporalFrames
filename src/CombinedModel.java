@@ -775,6 +775,13 @@ public class CombinedModel {
 
         // initialize weights
         weights = new double[nFeatures];
+        weights[0] = 0.18;
+        weights[1] = 0.82;
+        weights[2] = 0.0;
+        weights[3] = 2.0;
+        weights[4] = 1.1;
+        weights[5] = 0.0;
+        weights[6] = -0.3;
 
     }
 
@@ -1058,6 +1065,9 @@ public class CombinedModel {
         if (time > 0) {
             featureVector[1] = mood[time - 1];                   // mood at t-1
         }
+        else {
+            featureVector[1] = mood[time];                       // cheap substitute for previous mood in first year
+        }
         featureVector[2] = nArticlesAtTime[time];                // number of articles published in time t
         featureVector[3] = toneProbs[0] - toneProbs[2];          // net tone at time t
         featureVector[4] = featureVector[2] * featureVector[3];  // interaction b/w tone and nArticles
@@ -1070,7 +1080,7 @@ public class CombinedModel {
     private double computeEntropy(double [] framingProbs) {
         double entropy = 0;
         for (int j = 0; j < nLabels; j++) {
-            entropy -= framingProbs[j] * Math.log(framingProbs[j]) - (1-framingProbs[j]) * Math.log(1-framingProbs[j]);
+            entropy -= (framingProbs[j] * Math.log(framingProbs[j]) + (1-framingProbs[j]) * Math.log(1-framingProbs[j]));
         }
         return entropy;
     }
