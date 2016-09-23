@@ -89,6 +89,7 @@ public class CombinedModel {
     private static double mhTimeFramesStepSigma = 0.05 ;
     private static double mhTimeToneStepSigma = 0.1 ;
     private static double [] mhWeightsStepSigma = {0.05, 0.2, 0.2, 0.2, 0.5, 0.01, 0.05};
+    private static double mhOneWeightStepSigma = 0.0001;
     private static double mhQSigma = 0.05;
     private static double mhRSigma = 0.05;
     private static double mhSSigma = 0.05;
@@ -775,6 +776,7 @@ public class CombinedModel {
 
         // initialize weights
         weights = new double[nFeatures];
+        /*
         weights[0] = 0.18;
         weights[1] = 0.82;
         weights[2] = 0.0;
@@ -782,6 +784,7 @@ public class CombinedModel {
         weights[4] = 1.1;
         weights[5] = 0.0;
         weights[6] = -0.3;
+        */
 
     }
 
@@ -806,6 +809,7 @@ public class CombinedModel {
         double timeTonesRate = 0.0;
         double articleToneRates = 0.0;
         double [] weightRate = new double[nFeatures];
+        double oneWeightRate = 0.0;
         double [][] qRate = new double[nFramingAnnotators][nLabels];
         double [][] rRate = new double[nFramingAnnotators][nLabels];
         double [][] sRate = new double[nToneAnnotators][nTones];
@@ -817,10 +821,11 @@ public class CombinedModel {
             sampleArticleFrames();
             timeTonesRate += sampleTimeTones();
             sampleArticleTones();
-            double [] weightAcceptances = sampleWeights();
-            for (int f = 0; f < nFeatures; f++) {
-                weightRate[f] += (double) weightAcceptances[f];
-            }
+            //double [] weightAcceptances = sampleWeights();
+            //for (int f = 0; f < nFeatures; f++) {
+            //    weightRate[f] += (double) weightAcceptances[f];
+            //}
+            oneWeightRate += sampleAllWeights();
             double [][] qAcceptances = sampleQ();
             for (int k = 0; k < nFramingAnnotators; k++) {
                 for (int j = 0; j < nLabels; j++) {
@@ -901,10 +906,11 @@ public class CombinedModel {
         // Display acceptance rates
         System.out.println(timeFrameRate / i);
         System.out.println(timeTonesRate / i);
-        System.out.println("weight rates");
-        for (int f = 0; f < nFeatures; f++) {
-            System.out.println(weightRate[f] / i);
-        }
+        //System.out.println("weight rates");
+        //for (int f = 0; f < nFeatures; f++) {
+        //    System.out.println(weightRate[f] / i);
+        //}
+        System.out.println("weight rates: " + oneWeightRate / i);
         System.out.println(articleFramesRate / i);
         System.out.println(articleToneRates / i);
         System.out.println("Q rates");
@@ -1415,6 +1421,48 @@ public class CombinedModel {
         return nAccepted;
     }
 
+
+    private double sampleAllWeights() {
+        double nAccepted = 0.0;
+
+        double [] current = new double[nFeatures];
+        double [] proposal = new double[nFeatures];
+        System.arraycopy(weights, 0, current, 0, nFeatures);
+        //System.arraycopy(weights, 0, proposal, 0, nFeatures);
+
+        //double currentVal = current[f];
+        double [][] covar = new double [nFeatures][nFeatures];
+        for (int f = 0; f < nFeatures; f++) {
+            covar[f][f] = mhOneWeightStepSigma;
+        }
+        MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(current, covar);
+
+        proposal = proposalDist.sample();
+
+        double [] means = new double[nFeatures];
+        for (int f = 0; f < nFeatures; f++) {
+            covar[f][f] = weightSigma;
+        }
+        MultivariateNormalDistribution prior = new MultivariateNormalDistribution(means, covar);
+
+        double pLogCurrent = Math.log(prior.density(current));
+        double pLogProposal = Math.log(prior.density(proposal));
+
+        for (int t = 0; t < nTimes; t++) {
+            double [] featureVector = computeFeatureVector(t, timeToneSimplex.get(t), timeEntropy[t]);
+            pLogCurrent += computeLogProbMood(featureVector, current, mood[t], moodSigma);
+            pLogProposal += computeLogProbMood(featureVector, proposal, mood[t], moodSigma);
+        }
+        double a = Math.exp(pLogProposal - pLogCurrent);
+        double u = rand.nextDouble();
+
+        if (u < a) {
+            System.arraycopy(proposal, 0, weights, 0, nFeatures);
+            nAccepted += 1;
+        }
+
+        return nAccepted;
+    }
 
 
 
