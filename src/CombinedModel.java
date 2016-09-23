@@ -88,7 +88,7 @@ public class CombinedModel {
     // Metropolis-Hastings step parameters
     private static double mhTimeFramesStepSigma = 0.05 ;
     private static double mhTimeToneStepSigma = 0.1 ;
-    private static double [] mhWeightsStepSigma = {0.1, 1.0, 1.0, 1.0, 2.0, 0.1, 0.1};
+    private static double [] mhWeightsStepSigma = {0.05, 0.2, 0.2, 0.2, 0.5, 0.01, 0.05};
     private static double mhQSigma = 0.05;
     private static double mhRSigma = 0.05;
     private static double mhSSigma = 0.05;
