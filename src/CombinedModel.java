@@ -1439,20 +1439,27 @@ public class CombinedModel {
 
         proposal = proposalDist.sample();
 
+        /*
         double [] means = new double[nFeatures];
         for (int f = 0; f < nFeatures; f++) {
             covar[f][f] = weightSigma;
         }
-        MultivariateNormalDistribution prior = new MultivariateNormalDistribution(means, covar);
+        */
+        NormalDistribution prior = new NormalDistribution(0, weightSigma);
+        double pLogCurrent = 0.0;
+        double pLogProposal = 0.0;
 
-        double pLogCurrent = Math.log(prior.density(current));
-        double pLogProposal = Math.log(prior.density(proposal));
+        for (int f = 0; f < nFeatures; f++) {
+            pLogCurrent += Math.log(prior.density(current[f]));
+            pLogProposal += Math.log(prior.density(proposal[f]));
+        }
 
         for (int t = 0; t < nTimes; t++) {
             double [] featureVector = computeFeatureVector(t, timeToneSimplex.get(t), timeEntropy[t]);
             pLogCurrent += computeLogProbMood(featureVector, current, mood[t], moodSigma);
             pLogProposal += computeLogProbMood(featureVector, proposal, mood[t], moodSigma);
         }
+
         double a = Math.exp(pLogProposal - pLogCurrent);
         double u = rand.nextDouble();
 
