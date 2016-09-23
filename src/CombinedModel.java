@@ -508,7 +508,7 @@ public class CombinedModel {
             else if (j == 3) {
                 if (normalizeMood) {
                     // normalize mood to be in the range (-1, 1)
-                    moodVal = (Double.parseDouble(next) - 50) / 50.0;
+                    moodVal = Double.parseDouble(next) / 100.0;
                 } else {
                     moodVal = Double.parseDouble(next);
                 }
@@ -1414,6 +1414,8 @@ public class CombinedModel {
         }
         return nAccepted;
     }
+
+
 
 
     double [][] sampleQ() {
