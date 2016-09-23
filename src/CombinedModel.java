@@ -83,12 +83,12 @@ public class CombinedModel {
     private double timeFramesRealSigma = 0.01;
     private double timeToneRealSigma = 0.01;
     private double weightSigma = 20.0;
-    private double moodSigma = 1.0;
+    private double moodSigma = 0.25;
 
     // Metropolis-Hastings step parameters
     private static double mhTimeFramesStepSigma = 0.05 ;
     private static double mhTimeToneStepSigma = 0.1 ;
-    private static double [] mhWeightsStepSigma = {0.1, 1.0, 1.0, 1.0, 2.0, 0.1, 0.5};
+    private static double [] mhWeightsStepSigma = {0.1, 1.0, 1.0, 1.0, 2.0, 0.1, 0.1};
     private static double mhQSigma = 0.05;
     private static double mhRSigma = 0.05;
     private static double mhSSigma = 0.05;
@@ -372,8 +372,8 @@ public class CombinedModel {
                         // treat predictions as coming from a separate anntoator
                         // loop through this annotator's annotations
                         articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
-                        // store the total number of annotations for each label
-                        framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        // don't use the articles that are only annotated by the classifier for Q / R / S
+                        //framingAnnotatorArticles.get(annotatorIndex).add(i);
                         //for (int j = 0; j < nLabels; j++) {
                         //    framesMean[j] += (double) framingPredictions.get(articleName)[j];
                         //}
@@ -447,8 +447,8 @@ public class CombinedModel {
                         // loop through this annotator's annotations
                         Integer tonePrediction = tonePredictions.get(articleName);
                         articleAnnotations.put(annotatorIndex, tonePrediction);
-                        // store the total number of annotations for each label
-                        toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        // as above
+                        //toneAnnotatorArticles.get(annotatorIndex).add(i);
                         //tonesMean[tonePrediction] += 1.0;
                         // store the annotations for this article
                         toneAnnotations.add(articleAnnotations);
@@ -1407,11 +1407,9 @@ public class CombinedModel {
                 nAccepted[f] += 1;
             }
 
-            /*
             if (Double.isInfinite(pLogProposal)) {
                 System.out.println("Inf in sample weight " + f);
             }
-            */
 
         }
         return nAccepted;
