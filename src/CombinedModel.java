@@ -1060,9 +1060,9 @@ public class CombinedModel {
         }
         featureVector[2] = nArticlesAtTime[time];                // number of articles published in time t
         featureVector[3] = toneProbs[0] - toneProbs[2];          // net tone at time t
-        featureVector[4] = featureVector[2] * featureVector[3];  // interaction
+        featureVector[4] = featureVector[2] * featureVector[3];  // interaction b/w tone and nArticles
         featureVector[5] = entropy;                              // entropy
-        featureVector[6] = featureVector[2] * featureVector[5];  // intercept
+        featureVector[6] = featureVector[3] * featureVector[5];  // interaction b/w tone and entropy
 
         return featureVector;
     }
