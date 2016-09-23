@@ -788,6 +788,7 @@ public class CombinedModel {
 
     void run(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
         int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
+        System.out.println("Collecting " + nSamples + " samples");
 
         double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
         int articleFrameSamples [][][] = new int[nSamples][nArticlesWithFraming][nLabels];
