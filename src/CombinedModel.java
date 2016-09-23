@@ -82,13 +82,13 @@ public class CombinedModel {
 
     private double timeFramesRealSigma = 0.01;
     private double timeToneRealSigma = 0.01;
-    private double weightSigma = 100.0;
+    private double weightSigma = 20.0;
     private double moodSigma = 1.0;
 
     // Metropolis-Hastings step parameters
     private static double mhTimeFramesStepSigma = 0.05 ;
     private static double mhTimeToneStepSigma = 0.1 ;
-    private static double [] mhWeightsStepSigma = {0.25, 1.0, 1.0, 1.0, 2.0, 0.05, 0.25};
+    private static double [] mhWeightsStepSigma = {0.1, 1.0, 1.0, 1.0, 2.0, 0.1, 0.5};
     private static double mhQSigma = 0.05;
     private static double mhRSigma = 0.05;
     private static double mhSSigma = 0.05;
@@ -1081,7 +1081,9 @@ public class CombinedModel {
             mean += weights[f] * featureVector[f];
         }
         NormalDistribution currentMoodDist = new NormalDistribution(mean, moodSigma);
-        return Math.log(currentMoodDist.density(mood));
+        double pLogMood = Math.log(currentMoodDist.density(mood));
+
+        return pLogMood;
     }
 
 
@@ -1393,6 +1395,12 @@ public class CombinedModel {
                 weights[f] = proposalVal;
                 nAccepted[f] += 1;
             }
+
+            /*
+            if (Double.isInfinite(pLogProposal)) {
+                System.out.println("Inf in sample weight " + f);
+            }
+            */
 
         }
         return nAccepted;

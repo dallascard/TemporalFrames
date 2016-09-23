@@ -38,9 +38,12 @@ public class Main {
         //Sampler sampler = new Sampler(documents, metadata, predictions);
 
 
-        CombinedModel sampler = new CombinedModel(documents, metadata, predictions, mood, false, false);
+        boolean normalizeStoriesAtTime = true;
+        boolean normalizeMood = true;
 
-        sampler.run(6000, 4000, 10, 100);
+        CombinedModel sampler = new CombinedModel(documents, metadata, predictions, mood, normalizeStoriesAtTime, normalizeMood);
+
+        sampler.run(500, 400, 10, 100);
 
     }
 }
