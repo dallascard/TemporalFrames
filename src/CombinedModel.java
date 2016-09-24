@@ -31,13 +31,14 @@ public class CombinedModel {
     private static int nTones = 3;
 
     private static int firstYear = 1980;
-    private static int firstQuarter = 1;
+    private static int firstQuarter = 0;
     private static int nMonthsPerYear = 12;
     private static int nQuartersPerYear = 4;
     private static int nMonthsPerQuarter = 3;
     private static int nFeatures = 7;
 
     private Set<String> irrelevantArticles;
+    private Set<String> trainingArticles;
     private HashMap<String, Integer> newspaperIndices;
     private HashMap<String, Integer> articleNameTime;
     private HashMap<String, Integer> articleNameNewspaper;
@@ -199,6 +200,7 @@ public class CombinedModel {
         System.out.println(toneAnnotatorIndices);
 
         // read in the annotations and build up all relevant information
+        trainingArticles = new HashSet<>();
         framingArticleNames = new ArrayList<>();
         toneArticleNames = new ArrayList<>();
         framingArticleTime = new HashMap<>();
@@ -309,7 +311,7 @@ public class CombinedModel {
         HashMap<String, Integer> tonePredictions = new HashMap<>();
         scanner.useDelimiter(",");
         // skip the header
-        for (int i = 0; i < 18; i++) {
+        for (int i = 0; i < 19; i++) {
             String next = scanner.next();
             next = "";
         }
@@ -317,16 +319,23 @@ public class CombinedModel {
         int[] pArray = new int[nLabels];
         int tVal = 0;
         int iNext = 0;
+        int isTrain = 0;
         while (scanner.hasNext()) {
             String next = scanner.next();
-            int j = iNext % 18;
+            int j = iNext % 19;
+            //System.out.println(j + " " + next);
             if (j == 1) {
                 rowArticleName = next;
             }
-            else if (j > 1 && j < 17) {
-                pArray[j-2] = Integer.parseInt(next);
+            if (j == 2) {
+                if (Integer.parseInt(next) > 0) {
+                    trainingArticles.add(rowArticleName);
+                }
             }
-            else if (j == 17) {
+            else if (j > 2 && j < 18) {
+                pArray[j-3] = Integer.parseInt(next);
+            }
+            else if (j == 18) {
                 tVal = Integer.parseInt(next);
                 framingPredictions.put(rowArticleName, pArray);
                 tonePredictions.put(rowArticleName, tVal);
@@ -354,9 +363,12 @@ public class CombinedModel {
                         HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
                         // treat predictions as coming from a separate annotator
                         articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
-                        framingAnnotatorArticles.get(annotatorIndex).add(i);
                         // store the annotations for this article
                         framingAnnotations.set(i, articleAnnotations);
+                        // if this is not a training article, use it to estimate classifier properties
+                        if (!trainingArticles.contains(articleName)) {
+                            framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        }
                     } else {
                         // add information for a new article
                         // get a new article id (i)
@@ -373,8 +385,8 @@ public class CombinedModel {
                         // treat predictions as coming from a separate anntoator
                         // loop through this annotator's annotations
                         articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
-                        // don't use the articles that are only annotated by the classifier for Q / R / S
-                        //framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        // also use these unannotated articles for estimation of classifier properties
+                        framingAnnotatorArticles.get(annotatorIndex).add(i);
                         //for (int j = 0; j < nLabels; j++) {
                         //    framesMean[j] += (double) framingPredictions.get(articleName)[j];
                         //}
@@ -389,6 +401,10 @@ public class CombinedModel {
         nFramingAnnotators += 1;
 
         System.out.println(framingAnnotations.size() + " articles with framing annotations");
+
+        for (k = 0; k < nFramingAnnotators; k++) {
+             System.out.println("Annotator: " + k + "; annotations: " + framingAnnotatorArticles.get(k).size());
+        }
 
         /*
         // Try using all articles
@@ -428,9 +444,12 @@ public class CombinedModel {
                         HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
                         // treat predictions as coming from a separate annotator
                         articleAnnotations.put(annotatorIndex, tonePredictions.get(articleName));
-                        toneAnnotatorArticles.get(annotatorIndex).add(i);
                         // store the annotations for this article
                         toneAnnotations.set(i, articleAnnotations);
+                        // as above
+                        if (!trainingArticles.contains(articleName)) {
+                            toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        }
                     } else {
                         // add information for a new article
                         // get a new article id (i)
@@ -449,7 +468,7 @@ public class CombinedModel {
                         Integer tonePrediction = tonePredictions.get(articleName);
                         articleAnnotations.put(annotatorIndex, tonePrediction);
                         // as above
-                        //toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        toneAnnotatorArticles.get(annotatorIndex).add(i);
                         //tonesMean[tonePrediction] += 1.0;
                         // store the annotations for this article
                         toneAnnotations.add(articleAnnotations);
