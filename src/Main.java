@@ -43,7 +43,7 @@ public class Main {
 
         CombinedModel sampler = new CombinedModel(documents, metadata, predictions, mood, normalizeStoriesAtTime, normalizeMood);
 
-        sampler.run(11000, 10000, 10, 100);
+        sampler.run(6000, 5000, 10, 100);
 
     }
 }

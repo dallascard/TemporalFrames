@@ -1136,20 +1136,21 @@ public class CombinedModel {
             double proposalCube[] = Transformations.realsToCube(proposalReals, nLabels);
 
             // get the distribution over frames at the previous time point
-            double previousReals[];
+            double previousReals[] = new double[nLabels];
+            double priorCovariance[][] = new double[nLabels][nLabels];
             if (t > 0) {
                 previousReals = timeFramesReals.get(t-1);
+                for (int k = 0; k < nLabels; k++) {
+                    priorCovariance[k][k] = timeFramesRealSigma;
+                }
             } else {
                 // if t == 0, use the global mean
-                double [] previousCube = new double[nLabels];
-                System.arraycopy(framesMean, 0, previousCube, 0, nLabels);
-                previousReals = Transformations.cubeToReals(previousCube, nLabels);
-            }
-
-            // compute a distribution over the current time point given previous
-            double priorCovariance[][] = new double[nLabels][nLabels];
-            for (int k = 0; k < nLabels; k++) {
-                priorCovariance[k][k] = timeFramesRealSigma;
+                //double [] previousCube = new double[nLabels];
+                //System.arraycopy(framesMean, 0, previousCube, 0, nLabels);
+                //previousReals = Transformations.cubeToReals(previousCube, nLabels);
+                for (int k = 0; k < nLabels; k++) {
+                    priorCovariance[k][k] = timeFramesRealSigma * 100;
+                }
             }
 
             MultivariateNormalDistribution previousDist = new MultivariateNormalDistribution(previousReals, priorCovariance);
@@ -1186,6 +1187,7 @@ public class CombinedModel {
 
             pLogCurrent += computeLogProbMood(currentVector, weights, mood[t], moodSigma);
             pLogProposal += computeLogProbMood(proposalVector, weights, mood[t], moodSigma);
+
 
             double a = Math.exp(pLogProposal - pLogCurrent);
             double u = rand.nextDouble();
@@ -1274,21 +1276,25 @@ public class CombinedModel {
             double proposalSimplex[] = Transformations.realsToSimplex(proposalReals, nTones);
 
             // get the distribution over tones at the previous time point
-            double previousReals[];
+            double previousReals[] = new double[nTones];
+            double priorCovariance[][] = new double[nTones][nTones];
             if (t > 0) {
                 previousReals = timeToneReals.get(t-1);
+                // compute a distribution over the current time point given previous
+                for (int k = 0; k < nTones; k++) {
+                    priorCovariance[k][k] = timeToneRealSigma;
+                }
             } else {
                 // if t == 0, use the global mean
-                double [] previousSimplex = new double[nTones];
-                System.arraycopy(tonesMean, 0, previousSimplex, 0, nTones);
-                previousReals = Transformations.simplexToReals(previousSimplex, nTones);
+                //double [] previousSimplex = new double[nTones];
+                //System.arraycopy(tonesMean, 0, previousSimplex, 0, nTones);
+                //previousReals = Transformations.simplexToReals(previousSimplex, nTones);
+                // compute a distribution over the current time point given previous
+                for (int k = 0; k < nTones; k++) {
+                    priorCovariance[k][k] = timeToneRealSigma * 100;
+                }
             }
 
-            // compute a distribution over the current time point given previous
-            double priorCovariance[][] = new double[nTones][nTones];
-            for (int k = 0; k < nTones; k++) {
-                priorCovariance[k][k] = timeToneRealSigma;
-            }
 
             MultivariateNormalDistribution previousDist = new MultivariateNormalDistribution(previousReals, priorCovariance);
 
