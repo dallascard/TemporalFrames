@@ -79,11 +79,11 @@
 \item $x_6 = x_3 \cdot x_5$
 \end{itemize}
 \item $z_{ij} = \textrm{Bernoulli}(F_{t_i j})$
-\item (!) $\mu_{qj} = \textrm{Beta}(2,1)$
-\item (!) $\gamma_{qj} = \textrm{Gamma}(1.5,1)$
-\item (!) $\alpha_{qj} = \gamma_{qj} \cdot \mathbb{I}[\mu_{qj} >= 0.5] + \mu_{qj} \gamma_{qj} / (1 - \mu_{qj}) \cdot \mathbb{I}[\mu_{qj} < 0.5]$
-\item (!) $\beta_{qj} = \gamma_{qj} \cdot \mathbb{I}[\mu_{qj} < 0.5] + \gamma_{qj} (1 - \mu_{qj} ) / \mu_{qj} \cdot \mathbb{I}[\mu_{qj} >= 0.5]$
-\item (!) $q_{jk} \sim \textrm{Beta}(\alpha_{qj}, \beta_{qj})$
+\item (!) $\mu_{qk} = \textrm{Beta}(2,1)$
+\item (!) $\gamma_{qk} = \textrm{Gamma}(1.5,1)$
+\item (!) $\alpha_{qk} = \gamma_{qk} \cdot \mathbb{I}[\mu_{qk} >= 0.5] + \mu_{qk} \gamma_{qk} / (1 - \mu_{qk}) \cdot \mathbb{I}[\mu_{qk} < 0.5]$
+\item (!) $\beta_{qk} = \gamma_{qk} \cdot \mathbb{I}[\mu_{qk} < 0.5] + \gamma_{qk} (1 - \mu_{qk} ) / \mu_{qk} \cdot \mathbb{I}[\mu_{qk} >= 0.5]$
+\item (!) $q_{jk} \sim \textrm{Beta}(\alpha_{qk}, \beta_{qk})$
 \item (!) $r_{jk} \sim U[0.5, 1]$
 \item $y_{ijk} = \textrm{Bernoulli}\left( q_{jk} \cdot \mathbb{I}[{z_{ij}}=1] + (1-r_{jk}) \cdot \mathbb{I}[z_{ij} = 0]\right)$
 \item $v_{i} = \textrm{Multinomial}(T_{t_i})$

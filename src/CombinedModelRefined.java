@@ -7,6 +7,7 @@ import java.util.*;
 
 import org.apache.commons.math3.distribution.BetaDistribution;
 import org.apache.commons.math3.distribution.NormalDistribution;
+import org.apache.commons.math3.special.Beta;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
@@ -18,7 +19,7 @@ import org.apache.commons.math3.distribution.MultivariateNormalDistribution;
 import org.apache.commons.math3.analysis.function.Sigmoid;
 
 
-public class CombinedModel {
+public class CombinedModelRefined {
 
     private int nArticlesWithFraming;
     private int nArticlesWithTone;
@@ -71,8 +72,11 @@ public class CombinedModel {
     private double[][][] sReal;
     private double[] weights;
 
-    private double mu_q = 0.667;
-    private double gamma_q = 1.5;
+    private double[] mu_q;
+    private double[] gamma_q;
+
+    private double[] mu_r;
+    private double[] gamma_r;
 
     private double[] framesMean;
     private double[] tonesMean;
@@ -92,6 +96,8 @@ public class CombinedModel {
     private static double [] mhWeightsStepSigma = {0.05, 0.2, 0.2, 0.2, 0.5, 0.01, 0.05};
     private static double mhOneWeightStepSigma = 0.0001;
     private static double mhQSigma = 0.05;
+    private static double mhMuQSigma = 0.05;
+    private static double mhGammaQSigma = 0.05;
     private static double mhRSigma = 0.05;
     private static double mhSSigma = 0.05;
     private static double [][] mhSCovariance = {{mhSSigma, 0, 0}, {0, mhSSigma, 0}, {0, 0, mhSSigma}};
@@ -100,7 +106,7 @@ public class CombinedModel {
     private static RandomStream randomStream = new MRG32k3a();
     private static Sigmoid sigmoid = new Sigmoid();
 
-    public CombinedModel(String inputFilename, String metadataFilename, String predictionsFilename, String moodFilename,
+    public CombinedModelRefined(String inputFilename, String metadataFilename, String predictionsFilename, String moodFilename,
                          boolean normalizeStoriesAtTime, boolean normalizeMood) throws Exception {
 
         Path inputPath = Paths.get(inputFilename);
@@ -403,7 +409,7 @@ public class CombinedModel {
         System.out.println(framingAnnotations.size() + " articles with framing annotations");
 
         for (k = 0; k < nFramingAnnotators; k++) {
-             System.out.println("Annotator: " + k + "; annotations: " + framingAnnotatorArticles.get(k).size());
+            System.out.println("Annotator: " + k + "; annotations: " + framingAnnotatorArticles.get(k).size());
         }
 
         /*
@@ -770,11 +776,30 @@ public class CombinedModel {
         // initialize annotator parameters to reasonable values
         q = new double[nFramingAnnotators][nLabels];
         r = new double[nFramingAnnotators][nLabels];
+        mu_q = new double[nFramingAnnotators];
+        gamma_q = new double[nFramingAnnotators];
+        mu_r = new double[nFramingAnnotators];
+        gamma_r = new double[nFramingAnnotators];
         for (int k = 0; k < nFramingAnnotators; k++) {
+            mu_q[k] = 0.667;
+            gamma_q[k] = 1.5;
+            mu_r[k] = 0.667;
+            gamma_r[k] = 1.5;
+        }
+        for (int k = 0; k < nFramingAnnotators; k++) {
+            double alpha = Transformations.betaMuGammaToAlpha(mu_q[k], gamma_q[k]);
+            double beta = Transformations.betaMuGammaToBeta(mu_q[k], gamma_q[k]);
+            BetaDistribution priorQ = new BetaDistribution(alpha, beta);
             for (int j = 0; j < nLabels; j++) {
-                q[k][j] = 0.8;
-                r[k][j] = 0.8;
+                q[k][j] = priorQ.sample();
             }
+            alpha = Transformations.betaMuGammaToAlpha(mu_r[k], gamma_r[k]);
+            beta = Transformations.betaMuGammaToBeta(mu_r[k], gamma_r[k]);
+            BetaDistribution priorR = new BetaDistribution(alpha, beta);
+            for (int j = 0; j < nLabels; j++) {
+                r[k][j] = priorR.sample();
+            }
+
         }
 
         double priorCorrect = 0.8;
@@ -1497,7 +1522,7 @@ public class CombinedModel {
     }
 
 
-
+    // sample annotator and label-specific sensitivity parameters
     double [][] sampleQ() {
         double nAccepted [][] = new double[nFramingAnnotators][nLabels];
 
@@ -1513,25 +1538,22 @@ public class CombinedModel {
 
                 double a;
                 if (proposal > 0 && proposal < 1) {
-                    /*
-                    // using somewhat strong beta prior for now
-                    double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
-                    double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+                    // use the annotator-specific priors
+                    double alpha = Transformations.betaMuGammaToAlpha(mu_q[k], gamma_q[k]);
+                    double beta = Transformations.betaMuGammaToBeta(mu_q[k], gamma_q[k]);
 
+                    /*
                     if (alpha < 1 || beta < 1) {
                         System.out.println("Undesired beta parameters in Q");
-                        alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
-                        beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+                        alpha = Transformations.betaMuGammaToAlpha(mu_q[k], gamma_q[k]);
+                        beta = Transformations.betaMuGammaToBeta(mu_q[k], gamma_q[k]);
                     }
+                    */
 
 
                     BetaDistribution prior = new BetaDistribution(alpha, beta);
                     double pLogCurrent = prior.density(current);
                     double pLogProposal = prior.density(proposal);
-                    */
-                    // try using a U[0,1] prior and hope initialization guides us to identifiability
-                    double pLogCurrent = 0.0;
-                    double pLogProposal = 0.0;
                     for (int article : articles) {
                         int frames[] = articleFrames.get(article);
                         HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(article);
@@ -1564,6 +1586,52 @@ public class CombinedModel {
         return nAccepted;
     }
 
+    // sample the annotator-specific sensitivity means
+    double [] sampleMuQ() {
+        double nAccepted [] = new double[nFramingAnnotators];
+        for (int k = 0; k < nFramingAnnotators; k++) {
+            double current = mu_q[k];
+            double proposal = current + rand.nextGaussian() * mhMuQSigma;
+
+            BetaDistribution prior = new BetaDistribution(2, 1);
+
+            double a;
+            if (proposal > 0 && proposal < 1) {
+
+                // compute the prior probability using a fixed prior
+                double pLogCurrent = prior.density(current);
+                double pLogProposal = prior.density(proposal);
+
+                // transform current and proposed to beta parameters
+                double alphaCurrent = Transformations.betaMuGammaToAlpha(current, gamma_q[k]);
+                double betaCurrent = Transformations.betaMuGammaToBeta(current, gamma_q[k]);
+                BetaDistribution currentDist = new BetaDistribution(alphaCurrent, betaCurrent);
+
+                double alphaProposal = Transformations.betaMuGammaToAlpha(proposal, gamma_q[k]);
+                double betaProposal = Transformations.betaMuGammaToBeta(proposal, gamma_q[k]);
+                BetaDistribution proposalDist = new BetaDistribution(alphaProposal, betaProposal);
+
+                // update with the probabilities of each label-specific sensitivity
+                for (int j = 0; j < nLabels; j++) {
+                    pLogCurrent += currentDist.density(q[k][j]);
+                    pLogProposal += proposalDist.density(q[k][j]);
+                }
+
+                a = Math.exp(pLogProposal - pLogCurrent);
+            }
+            else {
+                a = -1;
+            }
+
+            double u = rand.nextDouble();
+            if (u < a) {
+                mu_q[k] = proposal;
+                nAccepted[k] += 1;
+            }
+        }
+        return nAccepted;
+    }
+
 
     double [][] sampleR() {
         double nAccepted [][] = new double[nFramingAnnotators][nLabels];
@@ -1580,25 +1648,23 @@ public class CombinedModel {
 
                 double a;
                 if (proposal > 0 && proposal < 1) {
-                    /*
                     // using somewhat strong beta prior for now
                     //BetaDistribution prior = new BetaDistribution(q_mu * q_gamma / (1 - q_mu), q_gamma);
-                    double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
-                    double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+                    double alpha = Transformations.betaMuGammaToAlpha(mu_r[k], gamma_r[k]);
+                    double beta = Transformations.betaMuGammaToBeta(mu_r[k], gamma_r[k]);
 
+                    /*
                     if (alpha < 1 || beta < 1) {
                         System.out.println("Undesired beta parameters in R");
-                        alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
-                        beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
+                        alpha = Transformations.betaMuGammaToAlpha(mu_r[k], gamma_r[k]);
+                        beta = Transformations.betaMuGammaToBeta(mu_r[k], gamma_r[k]);
                     }
+                    */
 
                     BetaDistribution prior = new BetaDistribution(alpha, beta);
 
                     double pLogCurrent = prior.density(current);
                     double pLogProposal = prior.density(proposal);
-                    */
-                    double pLogCurrent = 0.0;
-                    double pLogProposal = 0.0;
 
                     for (int article : articles) {
                         int frames[] = articleFrames.get(article);
@@ -1649,10 +1715,10 @@ public class CombinedModel {
 
                 // using pretty strong Dirichlet prior for now
                 double alpha[] = {1.0, 1.0, 1.0};
-                alpha[l] = 2.0;
+                alpha[l] = 1.5;
                 DirichletDist prior = new DirichletDist(alpha);
 
-                // using informed dirichlet prior for now
+                // using uniform prior for the moment
                 double pLogCurrent = Math.log(prior.density(currentSimplex));
                 double pLogProposal = Math.log(prior.density(proposalSimplex));
 
