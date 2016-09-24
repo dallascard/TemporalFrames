@@ -386,7 +386,7 @@ public class CombinedModel {
                         // loop through this annotator's annotations
                         articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
                         // also use these unannotated articles for estimation of classifier properties
-                        framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        //framingAnnotatorArticles.get(annotatorIndex).add(i);
                         //for (int j = 0; j < nLabels; j++) {
                         //    framesMean[j] += (double) framingPredictions.get(articleName)[j];
                         //}
@@ -468,7 +468,7 @@ public class CombinedModel {
                         Integer tonePrediction = tonePredictions.get(articleName);
                         articleAnnotations.put(annotatorIndex, tonePrediction);
                         // as above
-                        toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        //toneAnnotatorArticles.get(annotatorIndex).add(i);
                         //tonesMean[tonePrediction] += 1.0;
                         // store the annotations for this article
                         toneAnnotations.add(articleAnnotations);
