@@ -738,9 +738,8 @@ public class CombinedModelRefined {
                 }
             }
 
-            for (int j = 0; j < nLabels; j++) {
-                timeFramesMeanReals[j] = Math.log(-Math.log(timeFramesMean[j]));
-            }
+            timeFramesMeanReals = Transformations.cubeToReals(timeFramesMean, nLabels);
+
             timeFramesCube.add(timeFramesMean);
             timeFramesReals.add(timeFramesMeanReals);
             timeEntropy[t] = computeEntropy(timeFramesMean);
@@ -1157,10 +1156,13 @@ public class CombinedModelRefined {
             // get the distribution over frames at the previous time point
             double previousReals[] = new double[nLabels];
             double priorCovariance[][] = new double[nLabels][nLabels];
+            double priorNextCovariance[][] = new double[nLabels][nLabels];
+
             if (t > 0) {
                 previousReals = timeFramesReals.get(t-1);
                 for (int k = 0; k < nLabels; k++) {
                     priorCovariance[k][k] = timeFramesRealSigma;
+                    priorNextCovariance[k][k] = timeFramesRealSigma;
                 }
             } else {
                 // if t == 0, use the global mean
@@ -1169,6 +1171,7 @@ public class CombinedModelRefined {
                 //previousReals = Transformations.cubeToReals(previousCube, nLabels);
                 for (int k = 0; k < nLabels; k++) {
                     priorCovariance[k][k] = timeFramesRealSigma * 100;
+                    priorNextCovariance[k][k] = timeFramesRealSigma;
                 }
             }
 
@@ -1182,8 +1185,8 @@ public class CombinedModelRefined {
                 double nextReals[] = timeFramesReals.get(t+1);
 
                 // compute a distribution over a new distribution over frames for the current distribution
-                MultivariateNormalDistribution currentDist = new MultivariateNormalDistribution(currentReals, priorCovariance);
-                MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(proposalReals, priorCovariance);
+                MultivariateNormalDistribution currentDist = new MultivariateNormalDistribution(currentReals, priorNextCovariance);
+                MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(proposalReals, priorNextCovariance);
 
                 pLogCurrent += Math.log(currentDist.density(nextReals));
                 pLogProposal += Math.log(proposalDist.density(nextReals));
@@ -1297,11 +1300,13 @@ public class CombinedModelRefined {
             // get the distribution over tones at the previous time point
             double previousReals[] = new double[nTones];
             double priorCovariance[][] = new double[nTones][nTones];
+            double priorNextCovariance[][] = new double[nTones][nTones];
             if (t > 0) {
                 previousReals = timeToneReals.get(t-1);
                 // compute a distribution over the current time point given previous
                 for (int k = 0; k < nTones; k++) {
                     priorCovariance[k][k] = timeToneRealSigma;
+                    priorNextCovariance[k][k] = timeToneRealSigma;
                 }
             } else {
                 // if t == 0, use the global mean
@@ -1311,6 +1316,7 @@ public class CombinedModelRefined {
                 // compute a distribution over the current time point given previous
                 for (int k = 0; k < nTones; k++) {
                     priorCovariance[k][k] = timeToneRealSigma * 100;
+                    priorNextCovariance[k][k] = timeToneRealSigma;
                 }
             }
 
@@ -1325,8 +1331,8 @@ public class CombinedModelRefined {
                 double nextReals[] = timeToneReals.get(t+1);
 
                 // compute a distribution over a new distribution over tones for the current distribution
-                MultivariateNormalDistribution currentDist = new MultivariateNormalDistribution(currentReals, priorCovariance);
-                MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(proposalReals, priorCovariance);
+                MultivariateNormalDistribution currentDist = new MultivariateNormalDistribution(currentReals, priorNextCovariance);
+                MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(proposalReals, priorNextCovariance);
 
                 pLogCurrent += Math.log(currentDist.density(nextReals));
                 pLogProposal += Math.log(proposalDist.density(nextReals));
@@ -1377,7 +1383,6 @@ public class CombinedModelRefined {
             double pLogNeutral = Math.log(timeTones[1]);
             double pLogAnti = Math.log(timeTones[2]);
 
-            // compute the probability of the labels for both current and proposal
             HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
             for (int annotator : articleAnnotations.keySet()) {
                 int annotatorTone = articleAnnotations.get(annotator);
@@ -1514,6 +1519,7 @@ public class CombinedModelRefined {
                 double a;
                 if (proposal > 0 && proposal < 1) {
 
+                    /*
                     // using somewhat strong beta prior for now
                     double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
                     double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
@@ -1527,10 +1533,11 @@ public class CombinedModelRefined {
                     BetaDistribution prior = new BetaDistribution(alpha, beta);
                     double pLogCurrent = prior.density(current);
                     double pLogProposal = prior.density(proposal);
+                    */
 
                     // try using a U[0,1] prior and hope initialization guides us to identifiability
-                    //double pLogCurrent = 0.0;
-                    //double pLogProposal = 0.0;
+                    double pLogCurrent = 0.0;
+                    double pLogProposal = 0.0;
 
                     for (int article : articles) {
                         int frames[] = articleFrames.get(article);
@@ -1581,6 +1588,7 @@ public class CombinedModelRefined {
                 double a;
                 if (proposal > 0 && proposal < 1) {
 
+                    /*
                     // using somewhat strong beta prior for now
                     //BetaDistribution prior = new BetaDistribution(q_mu * q_gamma / (1 - q_mu), q_gamma);
                     double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
@@ -1596,9 +1604,10 @@ public class CombinedModelRefined {
 
                     double pLogCurrent = prior.density(current);
                     double pLogProposal = prior.density(proposal);
+                    */
 
-                    //double pLogCurrent = 0.0;
-                    //double pLogProposal = 0.0;
+                    double pLogCurrent = 0.0;
+                    double pLogProposal = 0.0;
 
                     for (int article : articles) {
                         int frames[] = articleFrames.get(article);
@@ -1647,6 +1656,7 @@ public class CombinedModelRefined {
                 double proposalReal [] = multNormDist.sample();
                 double proposalSimplex [] = Transformations.realsToSimplex(proposalReal, nTones);
 
+                /*
                 // using pretty strong Dirichlet prior for now
                 double alpha[] = {1.0, 1.0, 1.0};
                 alpha[l] = 2.0;
@@ -1654,6 +1664,10 @@ public class CombinedModelRefined {
 
                 double pLogCurrent = Math.log(prior.density(currentSimplex));
                 double pLogProposal = Math.log(prior.density(proposalSimplex));
+                */
+
+                double pLogCurrent = 0.0;
+                double pLogProposal = 0.0;
 
                 for (int article : articles) {
                     int tone = articleTone[article];
