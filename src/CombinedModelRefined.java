@@ -74,10 +74,10 @@ public class CombinedModelRefined {
     private double[][][] sReal;
     private double[] weights;
 
-    private double ppos_mu;
-    private double ppos_gamma;
-    private double pneg_mu;
-    private double pneg_gamma;
+    private double pposMu;
+    private double pposGamma;
+    private double pnegMu;
+    private double pnegGamma;
 
     private double mu_q = 0.667;
     private double gamma_q = 1.5;
@@ -796,10 +796,10 @@ public class CombinedModelRefined {
             }
         }
 
-        ppos_mu = 0.8;
-        ppos_gamma = 1.4;
-        pneg_mu = 0.2;
-        pneg_gamma = 1.4;
+        pposMu = 0.8;
+        pposGamma = 1.4;
+        pnegMu = 0.2;
+        pnegGamma = 1.4;
 
         // initialize weights
         weights = new double[nFeatures];
@@ -1237,11 +1237,11 @@ public class CombinedModelRefined {
     private void sampleArticleFrames() {
         // don't bother to track acceptance because we're going to properly use Gibbs for this
 
-        double ppos_alpha = Transformations.betaMuGammaToAlpha(ppos_mu, ppos_gamma);
-        double ppos_beta =  Transformations.betaMuGammaToBeta(ppos_mu, ppos_gamma);
+        double ppos_alpha = Transformations.betaMuGammaToAlpha(pposMu, pposGamma);
+        double ppos_beta =  Transformations.betaMuGammaToBeta(pposMu, pposGamma);
 
-        double pneg_alpha = Transformations.betaMuGammaToAlpha(pneg_mu, pneg_gamma);
-        double pneg_beta = Transformations.betaMuGammaToAlpha(pneg_mu, pneg_gamma);
+        double pneg_alpha = Transformations.betaMuGammaToAlpha(pnegMu, pnegGamma);
+        double pneg_beta = Transformations.betaMuGammaToAlpha(pnegMu, pnegGamma);
 
         BetaDistribution posDist = new BetaDistribution(ppos_alpha, ppos_beta);
         BetaDistribution negDist = new BetaDistribution(pneg_alpha, pneg_beta);
@@ -1289,6 +1289,36 @@ public class CombinedModelRefined {
         }
     }
 
+
+    private double samplePosMu() {
+        // run the distribution over tones for the first time point
+
+        double nAccepted = 0;
+        /*
+        double current = pposMu;
+        double proposal = pposMu + rand.nextGaussian() * mhMuSigma;
+
+
+        // loop through all time points
+        for (int t = 0; t < nTimes; t++) {
+
+
+            pLogCurrent += computeLogProbMood(currentVector, weights, mood[t], moodSigma);
+            pLogProposal += computeLogProbMood(proposalVector, weights, mood[t], moodSigma);
+
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                timeToneSimplex.set(t, proposalSimplex);
+                timeToneReals.set(t, proposalReals);
+                nAccepted += 1;
+            }
+
+        }
+        */
+        return nAccepted / nTimes;
+    }
 
 
     private double sampleTimeTones() {
