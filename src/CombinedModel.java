@@ -1656,7 +1656,7 @@ public class CombinedModel {
                 double proposalReal [] = multNormDist.sample();
                 double proposalSimplex [] = Transformations.realsToSimplex(proposalReal, nTones);
 
-                /*
+
                 // using pretty strong Dirichlet prior for now
                 double alpha[] = {1.0, 1.0, 1.0};
                 alpha[l] = 2.0;
@@ -1664,10 +1664,10 @@ public class CombinedModel {
 
                 double pLogCurrent = Math.log(prior.density(currentSimplex));
                 double pLogProposal = Math.log(prior.density(proposalSimplex));
-                */
 
-                double pLogCurrent = 0.0;
-                double pLogProposal = 0.0;
+
+                //double pLogCurrent = 0.0;
+                //double pLogProposal = 0.0;
 
                 for (int article : articles) {
                     int tone = articleTone[article];
