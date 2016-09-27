@@ -83,7 +83,7 @@ public class CombinedModel {
 
     private double timeFramesRealSigma = 0.01;
     private double timeToneRealSigma = 0.01;
-    private double weightSigma = 20.0;
+    private double weightSigma = 5.0;
     private double moodSigma = 0.25;
 
     // Metropolis-Hastings step parameters

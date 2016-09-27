@@ -58,6 +58,9 @@ public class CombinedModelRefined {
     private ArrayList<HashMap<Integer, int[]>> framingAnnotations;
     private ArrayList<HashMap<Integer, Integer>> toneAnnotations;
 
+    private ArrayList<Integer> framingPredProbArticles;
+    private HashMap<Integer, double[]> framingPredProbs;
+
     private ArrayList<double[]> timeFramesReals;     // phi
     private ArrayList<double[]> timeFramesCube;
     private ArrayList<int[]> articleFrames ;  // theta
@@ -70,6 +73,11 @@ public class CombinedModelRefined {
     private double[][][] sSimplex;  // combined equivalent of sens / spec for tone
     private double[][][] sReal;
     private double[] weights;
+
+    private double ppos_mu;
+    private double ppos_gamma;
+    private double pneg_mu;
+    private double pneg_gamma;
 
     private double mu_q = 0.667;
     private double gamma_q = 1.5;
@@ -307,7 +315,7 @@ public class CombinedModelRefined {
 
         // read in predictions and add to annotations
         Scanner scanner = new Scanner(new File(predictionsFilename));
-        HashMap<String, int[]> framingPredictions = new HashMap<>();
+        HashMap<String, double[]> framingPredictions = new HashMap<>();
         HashMap<String, Integer> tonePredictions = new HashMap<>();
         scanner.useDelimiter(",");
         // skip the header
@@ -316,7 +324,7 @@ public class CombinedModelRefined {
             next = "";
         }
         String rowArticleName = "";
-        int[] pArray = new int[nLabels];
+        double[] pArray = new double[nLabels];
         int tVal = 0;
         int iNext = 0;
         int isTrain = 0;
@@ -333,13 +341,13 @@ public class CombinedModelRefined {
                 }
             }
             else if (j > 2 && j < 18) {
-                pArray[j-3] = Integer.parseInt(next);
+                pArray[j-3] = Double.parseDouble(next);
             }
             else if (j == 18) {
                 tVal = Integer.parseInt(next);
                 framingPredictions.put(rowArticleName, pArray);
                 tonePredictions.put(rowArticleName, tVal);
-                pArray = new int[nLabels];
+                pArray = new double[nLabels];
             }
             iNext += 1;
         }
@@ -348,8 +356,10 @@ public class CombinedModelRefined {
         scanner.close();
 
         // incorporate the predictions into the annotations
-        int annotatorIndex = nFramingAnnotators;
-        framingAnnotatorArticles.put(annotatorIndex, new ArrayList<>());
+        //int annotatorIndex = nFramingAnnotators;
+        //framingAnnotatorArticles.put(annotatorIndex, new ArrayList<>());
+        framingPredProbArticles = new ArrayList<>();
+        framingPredProbs = new HashMap<>();
         for (String articleName : framingPredictions.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName)) {
@@ -359,15 +369,12 @@ public class CombinedModelRefined {
                         // add the prediction to the set of new annotations
                         // get the article ID
                         int i = framingArticleNames.indexOf(articleName);
-                        // create a hashmap to store the annotations for this article
-                        HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
-                        // treat predictions as coming from a separate annotator
-                        articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
-                        // store the annotations for this article
-                        framingAnnotations.set(i, articleAnnotations);
+
+                        framingPredProbs.put(i, framingPredictions.get(articleName));
+
                         // if this is not a training article, use it to estimate classifier properties
                         if (!trainingArticles.contains(articleName)) {
-                            framingAnnotatorArticles.get(annotatorIndex).add(i);
+                            framingPredProbArticles.add(i);
                         }
                     } else {
                         // add information for a new article
@@ -381,24 +388,21 @@ public class CombinedModelRefined {
                         // get the newspaper for this article (by name)
                         framingArticleNewspaper.put(i, articleNameNewspaper.get(articleName));
                         // create a hashmap to store the annotations for this article
-                        HashMap<Integer, int[]> articleAnnotations = new HashMap<>();
-                        // treat predictions as coming from a separate anntoator
-                        // loop through this annotator's annotations
-                        articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
+                        framingPredProbs.put(i, framingPredictions.get(articleName));
+
                         // also use these unannotated articles for estimation of classifier properties
                         //framingAnnotatorArticles.get(annotatorIndex).add(i);
                         //for (int j = 0; j < nLabels; j++) {
                         //    framesMean[j] += (double) framingPredictions.get(articleName)[j];
                         //}
                         // store the annotations for this article
-                        framingAnnotations.add(articleAnnotations);
                         timeFramingArticles.get(time).add(i);
                         //framingCount += 1;
                     }
                 }
             }
         }
-        nFramingAnnotators += 1;
+        //nFramingAnnotators += 1;
 
         System.out.println(framingAnnotations.size() + " articles with framing annotations");
 
@@ -431,7 +435,7 @@ public class CombinedModelRefined {
         */
 
         // treat the predictions as a new anntotator
-        annotatorIndex = nToneAnnotators;
+        int annotatorIndex = nToneAnnotators;
         toneAnnotatorArticles.put(annotatorIndex, new ArrayList<>());
         for (String articleName : tonePredictions.keySet()) {
             // check if this article is in the list of valid articles
@@ -490,8 +494,8 @@ public class CombinedModelRefined {
             tonesMean[j] = tonesMean[j] / (double) toneCount;
         }
 
-        nArticlesWithFraming = framingAnnotations.size();
-        nArticlesWithTone = toneAnnotations.size();
+        nArticlesWithFraming = framingArticleNames.size();
+        nArticlesWithTone = toneArticleNames.size();
 
         System.out.println("Mean of annotations:");
         for (int j = 0; j < nLabels; j++) {
@@ -791,6 +795,11 @@ public class CombinedModelRefined {
                 sReal[k][j] = Transformations.simplexToReals(sSimplex[k][j], nTones);
             }
         }
+
+        ppos_mu = 0.8;
+        ppos_gamma = 1.4;
+        pneg_mu = 0.2;
+        pneg_gamma = 1.4;
 
         // initialize weights
         weights = new double[nFeatures];
@@ -1228,6 +1237,15 @@ public class CombinedModelRefined {
     private void sampleArticleFrames() {
         // don't bother to track acceptance because we're going to properly use Gibbs for this
 
+        double ppos_alpha = Transformations.betaMuGammaToAlpha(ppos_mu, ppos_gamma);
+        double ppos_beta =  Transformations.betaMuGammaToBeta(ppos_mu, ppos_gamma);
+
+        double pneg_alpha = Transformations.betaMuGammaToAlpha(pneg_mu, pneg_gamma);
+        double pneg_beta = Transformations.betaMuGammaToAlpha(pneg_mu, pneg_gamma);
+
+        BetaDistribution posDist = new BetaDistribution(ppos_alpha, ppos_beta);
+        BetaDistribution negDist = new BetaDistribution(pneg_alpha, pneg_beta);
+
         // loop through all articles
         for (int i = 0; i < nArticlesWithFraming; i++) {
 
@@ -1251,6 +1269,12 @@ public class CombinedModelRefined {
                     pLogNegGivenTime += labels[j] * Math.log(1-q[annotator][j]) + (1-labels[j]) * Math.log(r[annotator][j]);
                 }
 
+                if (framingPredProbs.containsKey(i)) {
+                    double predProb = framingPredProbs.get(i)[j];
+                    pLogPosGivenTime += Math.log(posDist.density(predProb));
+                    pLogNegGivenTime += Math.log(negDist.density(predProb));
+                }
+
                 double pPosUnnorm = Math.exp(pLogPosGivenTime);
                 double pNegUnnorm = Math.exp(pLogNegGivenTime);
                 double pPos = pPosUnnorm / (pPosUnnorm + pNegUnnorm);
@@ -1264,6 +1288,7 @@ public class CombinedModelRefined {
             articleFrames.set(i, proposedLabels);
         }
     }
+
 
 
     private double sampleTimeTones() {
