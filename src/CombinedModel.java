@@ -839,11 +839,11 @@ public class CombinedModel {
             sampleArticleFrames();
             timeTonesRate += sampleTimeTones();
             sampleArticleTones();
-            //double [] weightAcceptances = sampleWeights();
-            //for (int f = 0; f < nFeatures; f++) {
-            //    weightRate[f] += (double) weightAcceptances[f];
-            //}
-            oneWeightRate += sampleAllWeights();
+            double [] weightAcceptances = sampleWeights();
+            for (int f = 0; f < nFeatures; f++) {
+                weightRate[f] += (double) weightAcceptances[f];
+            }
+            //oneWeightRate += sampleAllWeights();
             double [][] qAcceptances = sampleQ();
             for (int k = 0; k < nFramingAnnotators; k++) {
                 for (int j = 0; j < nLabels; j++) {
@@ -924,11 +924,11 @@ public class CombinedModel {
         // Display acceptance rates
         System.out.println(timeFrameRate / i);
         System.out.println(timeTonesRate / i);
-        //System.out.println("weight rates");
-        //for (int f = 0; f < nFeatures; f++) {
-        //    System.out.println(weightRate[f] / i);
-        //}
-        System.out.println("weight rates: " + oneWeightRate / i);
+        System.out.println("weight rates");
+        for (int f = 0; f < nFeatures; f++) {
+            System.out.println(weightRate[f] / i);
+        }
+        //System.out.println("weight rates: " + oneWeightRate / i);
         System.out.println(articleFramesRate / i);
         System.out.println(articleToneRates / i);
         System.out.println("Q rates");
