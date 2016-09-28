@@ -50,7 +50,7 @@ public class Main {
         boolean normalizeStoriesAtTime = true;
         boolean normalizeMood = true;
 
-        CombinedModel sampler = new CombinedModel(documents, metadata, predictions, mood, normalizeStoriesAtTime, normalizeMood);
+        CombinedModelBinaryTone sampler = new CombinedModelBinaryTone(documents, metadata, predictions, mood, normalizeStoriesAtTime, normalizeMood);
 
         sampler.run(n_iter, burn_in, sampling_period, display_period);
 

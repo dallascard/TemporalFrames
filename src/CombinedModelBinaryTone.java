@@ -592,7 +592,7 @@ public class CombinedModelBinaryTone {
         }
         */
 
-        //initialize();
+        initialize();
 
 
     }
@@ -874,6 +874,14 @@ public class CombinedModelBinaryTone {
                     rRate[k][j] += rAcceptances[k][j];
                 }
             }
+            double [] qToneAcceptances = sampleQTone();
+            for (int k = 0; k < nToneAnnotators; k++) {
+                qToneRate[k] += qToneAcceptances[k];
+            }
+            double [] rToneAcceptances = sampleRTone();
+            for (int k = 0; k < nToneAnnotators; k++) {
+                rToneRate[k] += rToneAcceptances[k];
+            }
 
             //globalMean = recomputeGlobalMean();
 
@@ -953,7 +961,17 @@ public class CombinedModelBinaryTone {
             }
             System.out.print("\n");
         }
+        System.out.println("Q Tone rates");
+        for (int k = 0; k < nFramingAnnotators; k++) {
+            System.out.print(qToneRate[k] / i + " ");
+        }
+        System.out.print("\n");
 
+        System.out.println("R Tone rates");
+        for (int k = 0; k < nFramingAnnotators; k++) {
+            System.out.print(rToneRate[k] / i + " ");
+        }
+        System.out.print("\n");
 
         // save results
         Path output_path;
@@ -1021,6 +1039,26 @@ public class CombinedModelBinaryTone {
                     }
                     file.write("\n");
                 }
+            }
+        }
+
+        output_path = Paths.get("samples", "qToneSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                for (int k = 0; k < nFramingAnnotators; k++) {
+                    file.write(qToneSamples[sample][k] + ",");
+                }
+                file.write("\n");
+            }
+        }
+
+        output_path = Paths.get("samples", "rToneSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                for (int k = 0; k < nFramingAnnotators; k++) {
+                    file.write(rToneSamples[sample][k] + ",");
+                }
+                file.write("\n");
             }
         }
 
@@ -1535,101 +1573,31 @@ public class CombinedModelBinaryTone {
     }
 
 
-
-    double [][] sampleQTone() {
-        double nAccepted [][] = new double[nFramingAnnotators][nLabels];
-
-        for (int k = 0; k < nToneAnnotators; k++) {
-            ArrayList<Integer> articles = framingAnnotatorArticles.get(k);
-
-            for (int j = 0; j < nLabels; j++) {
-                double current = q[k][j];
-                // transform from (0.5,1) to R and back
-                //double proposalReal = Math.log(-Math.log(current)) + rand.nextGaussian() * mhQSigma;
-                //double proposal = Math.exp(-Math.exp(proposalReal));
-                double proposal = current + rand.nextGaussian() * mhQSigma;
-
-                double a;
-                if (proposal > 0 && proposal < 1) {
-
-                    // try using a U[0,1] prior and hope initialization guides us to identifiability
-                    double pLogCurrent = 0.0;
-                    double pLogProposal = 0.0;
-
-                    for (int article : articles) {
-                        int frames[] = articleFrames.get(article);
-                        HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(article);
-                        int labels[] = articleAnnotations.get(k);
-                        double pPosCurrent = frames[j] * current + (1 - frames[j]) * (1 - r[k][j]);
-                        double pPosProposal = frames[j] * proposal + (1 - frames[j]) * (1 - r[k][j]);
-                        pLogCurrent += labels[j] * Math.log(pPosCurrent) + (1 - labels[j]) * Math.log(1 - pPosCurrent);
-                        pLogProposal += labels[j] * Math.log(pPosProposal) + (1 - labels[j]) * Math.log(1 - pPosProposal);
-                    }
-                    a = Math.exp(pLogProposal - pLogCurrent);
-                }
-                else {
-                    a = -1;
-                }
-
-                if (Double.isNaN(a)) {
-                    System.out.println("NaN in Q:" + current + " to " + proposal);
-                }
-                if (Double.isInfinite(a)) {
-                    System.out.println("Inf in Q:" + current + " to " + proposal);
-                }
-
-                double u = rand.nextDouble();
-                if (u < a) {
-                    q[k][j] = proposal;
-                    nAccepted[k][j] += 1;
-                }
-            }
-        }
-        return nAccepted;
-    }
-
-
-
-
-    /*
-    double [][] sampleQTone() {
+    double [] sampleQTone() {
         double nAccepted [] = new double[nToneAnnotators];
 
         for (int k = 0; k < nToneAnnotators; k++) {
             ArrayList<Integer> articles = toneAnnotatorArticles.get(k);
 
-            for (int l = 0; l < nTones; l++) {
-                double currentSimplex [] = sSimplex[k][l];
-                double currentReals [] = sReal[k][l];
+            double current = qTone[k];
+            double proposal = current + rand.nextGaussian() * mhRSigma;
 
-                MultivariateNormalDistribution multNormDist = new MultivariateNormalDistribution(currentReals, mhSCovariance);
-                double proposalReal [] = multNormDist.sample();
-                double proposalSimplex [] = Transformations.realsToSimplex(proposalReal, nTones);
+            double a;
+            if (proposal > 0 && proposal < 1) {
 
-
-                // using pretty strong Dirichlet prior for now
-                double alpha[] = {1.0, 1.0, 1.0};
-                alpha[l] = 2.0;
-                DirichletDist prior = new DirichletDist(alpha);
-
-                double pLogCurrent = Math.log(prior.density(currentSimplex));
-                double pLogProposal = Math.log(prior.density(proposalSimplex));
-
-
-                //double pLogCurrent = 0.0;
-                //double pLogProposal = 0.0;
+                double pLogCurrent = 0.0;
+                double pLogProposal = 0.0;
 
                 for (int article : articles) {
                     int tone = articleTone[article];
-                    if (tone == l) {
-                        HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(article);
-                        int annotatorTone = articleAnnotations.get(k);
-                        pLogCurrent += Math.log(currentSimplex[annotatorTone]);
-                        pLogProposal += Math.log(proposalSimplex[annotatorTone]);
-                    }
+                    HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(article);
+                    int label = articleAnnotations.get(k);
+                    double pPosCurrent = tone * current + (1 - tone) * (1 - rTone[k]);
+                    double pPosProposal = tone * proposal + (1 - tone) * (1 - rTone[k]);
+                    pLogCurrent += label * Math.log(pPosCurrent) + (1 - label) * Math.log(1 - pPosCurrent);
+                    pLogProposal += label * Math.log(pPosProposal) + (1 - label) * Math.log(1 - pPosProposal);
                 }
-                double a = Math.exp(pLogProposal - pLogCurrent);
-                double u = rand.nextDouble();
+                a = Math.exp(pLogProposal - pLogCurrent);
 
                 if (Double.isNaN(a)) {
                     System.out.println("NaN in S");
@@ -1637,16 +1605,66 @@ public class CombinedModelBinaryTone {
                 if (Double.isInfinite(a)) {
                     System.out.println("Inf in S");
                 }
-
-                if (u < a) {
-                    System.arraycopy(proposalReal, 0, sReal[k][l], 0, nTones);
-                    System.arraycopy(proposalSimplex, 0, sSimplex[k][l], 0, nTones);
-                    nAccepted[k][l] += 1;
-                }
+            } else {
+                a = -1;
             }
+
+            double u = rand.nextDouble();
+            if (u < a) {
+                qTone[k] = proposal;
+                nAccepted[k] += 1;
+            }
+
         }
         return nAccepted;
     }
+
+    double [] sampleRTone() {
+        double nAccepted [] = new double[nToneAnnotators];
+
+        for (int k = 0; k < nToneAnnotators; k++) {
+            ArrayList<Integer> articles = toneAnnotatorArticles.get(k);
+
+            double current = rTone[k];
+            double proposal = current + rand.nextGaussian() * mhRSigma;
+
+            double a;
+            if (proposal > 0 && proposal < 1) {
+
+                double pLogCurrent = 0.0;
+                double pLogProposal = 0.0;
+
+                for (int article : articles) {
+                    int tone = articleTone[article];
+                    HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(article);
+                    int label = articleAnnotations.get(k);
+                    double pPosCurrent = tone * qTone[k] + (1 - tone) * (1-current);
+                    double pPosProposal = tone * qTone[k] + (1 - tone) * (1-proposal);
+                    pLogCurrent += label * Math.log(pPosCurrent) + (1 - label) * Math.log(1 - pPosCurrent);
+                    pLogProposal += label * Math.log(pPosProposal) + (1 - label) * Math.log(1 - pPosProposal);
+                }
+                a = Math.exp(pLogProposal - pLogCurrent);
+
+                if (Double.isNaN(a)) {
+                    System.out.println("NaN in S");
+                }
+                if (Double.isInfinite(a)) {
+                    System.out.println("Inf in S");
+                }
+            } else {
+                a = -1;
+            }
+
+            double u = rand.nextDouble();
+            if (u < a) {
+                rTone[k] = proposal;
+                nAccepted[k] += 1;
+            }
+
+        }
+        return nAccepted;
+    }
+
 
 
 
@@ -1665,7 +1683,7 @@ public class CombinedModelBinaryTone {
         }
         return mean;
     }
-    */
+
 
 
     /*
