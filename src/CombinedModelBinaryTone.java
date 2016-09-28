@@ -87,11 +87,13 @@ public class CombinedModelBinaryTone {
 
     // Metropolis-Hastings step parameters
     private static double mhTimeFramesStepSigma = 0.05 ;
-    private static double mhTimeToneStepSigma = 0.1 ;
+    private static double mhTimeToneStepSigma = 0.01 ;
     private static double [] mhWeightsStepSigma = {0.05, 0.2, 0.2, 0.2, 0.5, 0.01, 0.05};
     private static double mhOneWeightStepSigma = 0.0001;
     private static double mhQSigma = 0.05;
     private static double mhRSigma = 0.05;
+    private static double mhQToneSigma = 0.02;
+    private static double mhRToneSigma = 0.02;
 
     private static Random rand = new Random();
     private static RandomStream randomStream = new MRG32k3a();
@@ -293,7 +295,7 @@ public class CombinedModelBinaryTone {
                             if (toneAnnotation >= 0) {
                                 articleAnnotations.put(annotatorIndex, toneAnnotation);
                                 toneAnnotatorArticles.get(annotatorIndex).add(i);
-                                meanTone += 1.0;
+                                meanTone += toneAnnotation;
                                 toneCount += 1;
 
                             }
@@ -524,6 +526,7 @@ public class CombinedModelBinaryTone {
         for (int j = 0; j < nLabels; j++) {
             System.out.print(framesMean[j] + " ");
         }
+        System.out.println("");
 
         System.out.println("Mean of tone annotations:" + meanTone);
 
@@ -1582,7 +1585,7 @@ public class CombinedModelBinaryTone {
             ArrayList<Integer> articles = toneAnnotatorArticles.get(k);
 
             double current = qTone[k];
-            double proposal = current + rand.nextGaussian() * mhRSigma;
+            double proposal = current + rand.nextGaussian() * mhQToneSigma;
 
             double a;
             if (proposal > 0 && proposal < 1) {
@@ -1628,7 +1631,7 @@ public class CombinedModelBinaryTone {
             ArrayList<Integer> articles = toneAnnotatorArticles.get(k);
 
             double current = rTone[k];
-            double proposal = current + rand.nextGaussian() * mhRSigma;
+            double proposal = current + rand.nextGaussian() * mhRToneSigma;
 
             double a;
             if (proposal > 0 && proposal < 1) {
@@ -1640,8 +1643,8 @@ public class CombinedModelBinaryTone {
                     int tone = articleTone[article];
                     HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(article);
                     int label = articleAnnotations.get(k);
-                    double pPosCurrent = tone * qTone[k] + (1 - tone) * (1-current);
-                    double pPosProposal = tone * qTone[k] + (1 - tone) * (1-proposal);
+                    double pPosCurrent = tone * qTone[k] + (1 - tone) * (1 - current);
+                    double pPosProposal = tone * qTone[k] + (1 - tone) * (1 - proposal);
                     pLogCurrent += label * Math.log(pPosCurrent) + (1 - label) * Math.log(1 - pPosCurrent);
                     pLogProposal += label * Math.log(pPosProposal) + (1 - label) * Math.log(1 - pPosProposal);
                 }

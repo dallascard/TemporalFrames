@@ -355,17 +355,17 @@ public class CombinedModel {
                 if (!irrelevantArticles.contains(articleName)) {
                     //JSONObject article = (JSONObject) data.get(articleName);
                     if (framingArticleNames.contains(articleName)) {
-                        // add the prediction to the set of new annotations
-                        // get the article ID
-                        int i = framingArticleNames.indexOf(articleName);
-                        // create a hashmap to store the annotations for this article
-                        HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
-                        // treat predictions as coming from a separate annotator
-                        articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
-                        // store the annotations for this article
-                        framingAnnotations.set(i, articleAnnotations);
-                        // if this is not a training article, use it to estimate classifier properties
                         if (!trainingArticles.contains(articleName)) {
+                            // add the prediction to the set of new annotations
+                            // get the article ID
+                            int i = framingArticleNames.indexOf(articleName);
+                            // create a hashmap to store the annotations for this article
+                            HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
+                            // treat predictions as coming from a separate annotator
+                            articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
+                            // store the annotations for this article
+                            framingAnnotations.set(i, articleAnnotations);
+                            // if this is not a training article, use it to estimate classifier properties
                             framingAnnotatorArticles.get(annotatorIndex).add(i);
                         }
                     } else {
@@ -437,16 +437,16 @@ public class CombinedModel {
             if (articleNameTime.containsKey(articleName)) {
                 if (!irrelevantArticles.contains(articleName)) {
                     if (toneArticleNames.contains(articleName)) {
-                        // get the article ID
-                        int i = toneArticleNames.indexOf(articleName);
-                        // create a hashmap to store the annotations for this article
-                        HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
-                        // treat predictions as coming from a separate annotator
-                        articleAnnotations.put(annotatorIndex, tonePredictions.get(articleName));
-                        // store the annotations for this article
-                        toneAnnotations.set(i, articleAnnotations);
-                        // as above
                         if (!trainingArticles.contains(articleName)) {
+                            // get the article ID
+                            int i = toneArticleNames.indexOf(articleName);
+                            // create a hashmap to store the annotations for this article
+                            HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
+                            // treat predictions as coming from a separate annotator
+                            articleAnnotations.put(annotatorIndex, tonePredictions.get(articleName));
+                            // store the annotations for this article
+                            toneAnnotations.set(i, articleAnnotations);
+                            // as above
                             toneAnnotatorArticles.get(annotatorIndex).add(i);
                         }
                     } else {
@@ -1658,7 +1658,7 @@ public class CombinedModel {
 
                 // using pretty strong Dirichlet prior for now
                 double alpha[] = {1.0, 1.0, 1.0};
-                alpha[l] = 2.0;
+                alpha[l] = 1.5;
                 DirichletDist prior = new DirichletDist(alpha);
 
                 double pLogCurrent = Math.log(prior.density(currentSimplex));
