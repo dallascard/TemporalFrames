@@ -9,8 +9,8 @@ public class Main {
         // set defaults
         params.put("-d", "input/documents.json");   // documents.json
         params.put("-m", "input/summary.json");                    // metadata summary.json
-        //params.put("-p", "input/uncorrected_with_tone.csv");
-        params.put("-p", "input/probs_with_tone.csv");
+        params.put("-p", "input/uncorrected_with_tone.csv");
+        //params.put("-p", "input/probs_with_tone.csv");
         params.put("-x", "input/quarter_smoothed_dummy.csv");            // mood: quarter_smoothed_dummy.csv
         params.put("-i", "1000");            // number of iterations
         params.put("-b", "500");            // burn in
@@ -50,7 +50,7 @@ public class Main {
         boolean normalizeStoriesAtTime = true;
         boolean normalizeMood = true;
 
-        CombinedModelRefined sampler = new CombinedModelRefined(documents, metadata, predictions, mood, normalizeStoriesAtTime, normalizeMood);
+        CombinedModel sampler = new CombinedModel(documents, metadata, predictions, mood, normalizeStoriesAtTime, normalizeMood);
 
         sampler.run(n_iter, burn_in, sampling_period, display_period);
 

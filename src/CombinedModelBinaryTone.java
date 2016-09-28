@@ -819,9 +819,9 @@ public class CombinedModelBinaryTone {
         weights[6] = -0.3;
         */
 
-    //}
+    }
 
-
+    /*
     void run(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
         int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
         System.out.println("Collecting " + nSamples + " samples");
@@ -1036,6 +1036,7 @@ public class CombinedModelBinaryTone {
         }
 
     }
+    */
 
     private double[] computeFeatureVector(int time, double posToneProb, double entropy) {
         double featureVector[] = new double[nFeatures];
@@ -1300,6 +1301,7 @@ public class CombinedModelBinaryTone {
         return nAccepted / nTimes;
     }
 
+    /*
 
     private void sampleArticleTones() {
         // don't bother to track acceptance because we're going to properly use Gibbs for this
@@ -1345,6 +1347,7 @@ public class CombinedModelBinaryTone {
 
         }
     }
+
 
 
     private double [] sampleWeights() {
@@ -1615,8 +1618,8 @@ public class CombinedModelBinaryTone {
         }
         return mean;
     }
-
     */
+
 
     /*
     private double sampleTimeFramesGuassian() {
@@ -1666,7 +1669,7 @@ public class CombinedModelBinaryTone {
             }
 
 
-            / *
+
             // compute a distribution for generating a proposal
             double mhProposalDist[] = new double[nLabels];
             for (int k = 0; k < nLabels; k++) {
@@ -1688,7 +1691,7 @@ public class CombinedModelBinaryTone {
 
             DirichletDist dirichletDistReverse = new DirichletDist(reverseDist);
             double mhpReverse = dirichletDist.density(current);
-            * /
+
 
             // compute a distribution over a new distribution over frames for the current distribution
             double currentDist[] = new double[nLabels];
