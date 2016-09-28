@@ -827,7 +827,7 @@ public class CombinedModelBinaryTone {
 
         double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
         int articleFrameSamples [][][] = new int[nSamples][nArticlesWithFraming][nLabels];
-        double timeToneSamples [][][] = new double[nSamples][nTimes][nLabels];
+        double timeToneSamples [][] = new double[nSamples][nTimes];
         int articleToneSamples [][] = new int[nSamples][nArticlesWithTone];
         double weightSamples [][] = new double[nSamples][nFeatures];
         double qSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
@@ -892,7 +892,7 @@ public class CombinedModelBinaryTone {
                     System.arraycopy(timeFramesCube.get(t), 0, timeFrameSamples[sample][t], 0, nLabels);
                 }
 
-                System.arraycopy(timeToneReal, 0, timeToneSamples, 0, nTimes);
+                System.arraycopy(timeToneReal, 0, timeToneSamples[sample], 0, nTimes);
 
                 for (int f = 0; f < nFeatures; f++) {
                     System.arraycopy(weights, 0, weightSamples[sample], 0, nFeatures);
