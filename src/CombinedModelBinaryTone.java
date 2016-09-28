@@ -821,7 +821,6 @@ public class CombinedModelBinaryTone {
 
     }
 
-    /*
     void run(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
         int nSamples = (int) Math.floor((nIter - burnIn) / (double) samplingPeriod);
         System.out.println("Collecting " + nSamples + " samples");
@@ -1036,7 +1035,7 @@ public class CombinedModelBinaryTone {
         }
 
     }
-    */
+
 
     private double[] computeFeatureVector(int time, double posToneProb, double entropy) {
         double featureVector[] = new double[nFeatures];
@@ -1301,7 +1300,6 @@ public class CombinedModelBinaryTone {
         return nAccepted / nTimes;
     }
 
-    /*
 
     private void sampleArticleTones() {
         // don't bother to track acceptance because we're going to properly use Gibbs for this
@@ -1313,36 +1311,28 @@ public class CombinedModelBinaryTone {
             int tone = articleTone[i];
 
             int time = toneArticleTime.get(i);
-            double timeTones[] = timeToneSimplex.get(time);
 
-            double pLogPositive = Math.log(timeTones[0]);
-            double pLogNeutral = Math.log(timeTones[1]);
-            double pLogAnti = Math.log(timeTones[2]);
+            double pLogPro = Math.log(timeToneProb[time]);
+            double pLogAnti = Math.log(1-timeToneProb[time]);
 
             HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
             for (int annotator : articleAnnotations.keySet()) {
                 int annotatorTone = articleAnnotations.get(annotator);
-                pLogPositive += Math.log(sSimplex[annotator][0][annotatorTone]);
-                pLogNeutral += Math.log(sSimplex[annotator][1][annotatorTone]);
-                pLogAnti += Math.log(sSimplex[annotator][2][annotatorTone]);
+                pLogPro += annotatorTone * Math.log(qTone[annotator]) + (1-annotatorTone) * Math.log(1-rTone[annotator]);
+                pLogAnti += annotatorTone * Math.log(1-qTone[annotator]) + (1-annotatorTone) * Math.log(rTone[annotator]);
             }
 
-            double pPositiveUnnorm = Math.exp(pLogPositive);
-            double pNeutralUnnorm = Math.exp(pLogNeutral);
+            double pPositiveUnnorm = Math.exp(pLogPro);
             double pAntiUnnorm = Math.exp(pLogAnti);
-            double pPos = pPositiveUnnorm / (pPositiveUnnorm + pNeutralUnnorm + pAntiUnnorm);
-            double pProNeutral = pPos + pNeutralUnnorm / (pPositiveUnnorm + pNeutralUnnorm + pAntiUnnorm);
+            double pPos = pPositiveUnnorm / (pPositiveUnnorm + pAntiUnnorm);
 
             double u = rand.nextDouble();
 
             if (u < pPos) {
-                articleTone[i] = 0;
-            }
-            else if (u < pProNeutral) {
                 articleTone[i] = 1;
             }
             else {
-                articleTone[i] = 2;
+                articleTone[i] = 0;
             }
 
         }
@@ -1368,7 +1358,7 @@ public class CombinedModelBinaryTone {
             double pLogProposal = Math.log(prior.density(proposalVal));
 
             for (int t = 0; t < nTimes; t++) {
-                double [] featureVector = computeFeatureVector(t, timeToneSimplex.get(t), timeEntropy[t]);
+                double [] featureVector = computeFeatureVector(t, timeToneProb[t], timeEntropy[t]);
                 pLogCurrent += computeLogProbMood(featureVector, current, mood[t], moodSigma);
                 pLogProposal += computeLogProbMood(featureVector, proposal, mood[t], moodSigma);
             }
@@ -1545,8 +1535,65 @@ public class CombinedModelBinaryTone {
     }
 
 
-    double [][] sampleS() {
-        double nAccepted [][] = new double[nToneAnnotators][nTones];
+
+    double [][] sampleQTone() {
+        double nAccepted [][] = new double[nFramingAnnotators][nLabels];
+
+        for (int k = 0; k < nToneAnnotators; k++) {
+            ArrayList<Integer> articles = framingAnnotatorArticles.get(k);
+
+            for (int j = 0; j < nLabels; j++) {
+                double current = q[k][j];
+                // transform from (0.5,1) to R and back
+                //double proposalReal = Math.log(-Math.log(current)) + rand.nextGaussian() * mhQSigma;
+                //double proposal = Math.exp(-Math.exp(proposalReal));
+                double proposal = current + rand.nextGaussian() * mhQSigma;
+
+                double a;
+                if (proposal > 0 && proposal < 1) {
+
+                    // try using a U[0,1] prior and hope initialization guides us to identifiability
+                    double pLogCurrent = 0.0;
+                    double pLogProposal = 0.0;
+
+                    for (int article : articles) {
+                        int frames[] = articleFrames.get(article);
+                        HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(article);
+                        int labels[] = articleAnnotations.get(k);
+                        double pPosCurrent = frames[j] * current + (1 - frames[j]) * (1 - r[k][j]);
+                        double pPosProposal = frames[j] * proposal + (1 - frames[j]) * (1 - r[k][j]);
+                        pLogCurrent += labels[j] * Math.log(pPosCurrent) + (1 - labels[j]) * Math.log(1 - pPosCurrent);
+                        pLogProposal += labels[j] * Math.log(pPosProposal) + (1 - labels[j]) * Math.log(1 - pPosProposal);
+                    }
+                    a = Math.exp(pLogProposal - pLogCurrent);
+                }
+                else {
+                    a = -1;
+                }
+
+                if (Double.isNaN(a)) {
+                    System.out.println("NaN in Q:" + current + " to " + proposal);
+                }
+                if (Double.isInfinite(a)) {
+                    System.out.println("Inf in Q:" + current + " to " + proposal);
+                }
+
+                double u = rand.nextDouble();
+                if (u < a) {
+                    q[k][j] = proposal;
+                    nAccepted[k][j] += 1;
+                }
+            }
+        }
+        return nAccepted;
+    }
+
+
+
+
+    /*
+    double [][] sampleQTone() {
+        double nAccepted [] = new double[nToneAnnotators];
 
         for (int k = 0; k < nToneAnnotators; k++) {
             ArrayList<Integer> articles = toneAnnotatorArticles.get(k);

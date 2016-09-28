@@ -71,8 +71,7 @@ public class CombinedModel {
     private double[][][] sReal;
     private double[] weights;
 
-    private double mu_q = 0.667;
-    private double gamma_q = 1.5;
+
 
     private double[] framesMean;
     private double[] tonesMean;
@@ -366,9 +365,9 @@ public class CombinedModel {
                         // store the annotations for this article
                         framingAnnotations.set(i, articleAnnotations);
                         // if this is not a training article, use it to estimate classifier properties
-                        if (!trainingArticles.contains(articleName)) {
-                            framingAnnotatorArticles.get(annotatorIndex).add(i);
-                        }
+                        //if (!trainingArticles.contains(articleName)) {
+                        framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        //}
                     } else {
                         // add information for a new article
                         // get a new article id (i)
@@ -386,7 +385,7 @@ public class CombinedModel {
                         // loop through this annotator's annotations
                         articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
                         // also use these unannotated articles for estimation of classifier properties
-                        //framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        framingAnnotatorArticles.get(annotatorIndex).add(i);
                         //for (int j = 0; j < nLabels; j++) {
                         //    framesMean[j] += (double) framingPredictions.get(articleName)[j];
                         //}
@@ -447,9 +446,9 @@ public class CombinedModel {
                         // store the annotations for this article
                         toneAnnotations.set(i, articleAnnotations);
                         // as above
-                        if (!trainingArticles.contains(articleName)) {
-                            toneAnnotatorArticles.get(annotatorIndex).add(i);
-                        }
+                        //if (!trainingArticles.contains(articleName)) {
+                        toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        //}
                     } else {
                         // add information for a new article
                         // get a new article id (i)
@@ -468,7 +467,7 @@ public class CombinedModel {
                         Integer tonePrediction = tonePredictions.get(articleName);
                         articleAnnotations.put(annotatorIndex, tonePrediction);
                         // as above
-                        //toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        toneAnnotatorArticles.get(annotatorIndex).add(i);
                         //tonesMean[tonePrediction] += 1.0;
                         // store the annotations for this article
                         toneAnnotations.add(articleAnnotations);
@@ -839,11 +838,11 @@ public class CombinedModel {
             sampleArticleFrames();
             timeTonesRate += sampleTimeTones();
             sampleArticleTones();
-            //double [] weightAcceptances = sampleWeights();
-            //for (int f = 0; f < nFeatures; f++) {
-            //    weightRate[f] += (double) weightAcceptances[f];
-            //}
-            oneWeightRate += sampleAllWeights();
+            double [] weightAcceptances = sampleWeights();
+            for (int f = 0; f < nFeatures; f++) {
+                weightRate[f] += (double) weightAcceptances[f];
+            }
+            //oneWeightRate += sampleAllWeights();
             double [][] qAcceptances = sampleQ();
             for (int k = 0; k < nFramingAnnotators; k++) {
                 for (int j = 0; j < nLabels; j++) {
@@ -924,11 +923,11 @@ public class CombinedModel {
         // Display acceptance rates
         System.out.println(timeFrameRate / i);
         System.out.println(timeTonesRate / i);
-        //System.out.println("weight rates");
-        //for (int f = 0; f < nFeatures; f++) {
-        //    System.out.println(weightRate[f] / i);
-        //}
-        System.out.println("weight rates: " + oneWeightRate / i);
+        System.out.println("weight rates");
+        for (int f = 0; f < nFeatures; f++) {
+            System.out.println(weightRate[f] / i);
+        }
+        //System.out.println("weight rates: " + oneWeightRate / i);
         System.out.println(articleFramesRate / i);
         System.out.println(articleToneRates / i);
         System.out.println("Q rates");
