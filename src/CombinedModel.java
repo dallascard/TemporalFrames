@@ -365,9 +365,9 @@ public class CombinedModel {
                         // store the annotations for this article
                         framingAnnotations.set(i, articleAnnotations);
                         // if this is not a training article, use it to estimate classifier properties
-                        //if (!trainingArticles.contains(articleName)) {
-                        framingAnnotatorArticles.get(annotatorIndex).add(i);
-                        //}
+                        if (!trainingArticles.contains(articleName)) {
+                            framingAnnotatorArticles.get(annotatorIndex).add(i);
+                        }
                     } else {
                         // add information for a new article
                         // get a new article id (i)
@@ -446,9 +446,9 @@ public class CombinedModel {
                         // store the annotations for this article
                         toneAnnotations.set(i, articleAnnotations);
                         // as above
-                        //if (!trainingArticles.contains(articleName)) {
-                        toneAnnotatorArticles.get(annotatorIndex).add(i);
-                        //}
+                        if (!trainingArticles.contains(articleName)) {
+                            toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        }
                     } else {
                         // add information for a new article
                         // get a new article id (i)
