@@ -908,6 +908,8 @@ public class CombinedModelBinaryTone {
                     System.arraycopy(q[k], 0, qSamples[sample][k], 0, nLabels);
                     System.arraycopy(r[k], 0, rSamples[sample][k], 0, nLabels);
                 }
+                System.arraycopy(qTone, 0, qToneSamples[sample], 0, nToneAnnotators);
+                System.arraycopy(rTone, 0, rToneSamples[sample], 0, nToneAnnotators);
 
                 System.arraycopy(timeEntropy, 0, entropySamples[sample], 0, nTimes);
 
