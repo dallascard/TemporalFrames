@@ -964,13 +964,13 @@ public class CombinedModelBinaryTone {
             System.out.print("\n");
         }
         System.out.println("Q Tone rates");
-        for (int k = 0; k < nFramingAnnotators; k++) {
+        for (int k = 0; k < nToneAnnotators; k++) {
             System.out.print(qToneRate[k] / i + " ");
         }
         System.out.print("\n");
 
         System.out.println("R Tone rates");
-        for (int k = 0; k < nFramingAnnotators; k++) {
+        for (int k = 0; k < nToneAnnotators; k++) {
             System.out.print(rToneRate[k] / i + " ");
         }
         System.out.print("\n");
