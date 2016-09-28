@@ -11,6 +11,7 @@ import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 
+import umontreal.ssj.probdist.BernoulliDist;
 import umontreal.ssj.probdistmulti.DirichletDist;
 import umontreal.ssj.rng.*;
 
@@ -18,7 +19,7 @@ import org.apache.commons.math3.distribution.MultivariateNormalDistribution;
 import org.apache.commons.math3.analysis.function.Sigmoid;
 
 
-public class CombinedModelRefined {
+public class CombinedModelBinaryTone {
 
     private int nArticlesWithFraming;
     private int nArticlesWithTone;
@@ -28,7 +29,7 @@ public class CombinedModelRefined {
     private int nNewspapers;
 
     private static int nLabels = 15;
-    private static int nTones = 3;
+    //private static int nTones = 3;
 
     private static int firstYear = 1980;
     private static int firstQuarter = 0;
@@ -58,32 +59,22 @@ public class CombinedModelRefined {
     private ArrayList<HashMap<Integer, int[]>> framingAnnotations;
     private ArrayList<HashMap<Integer, Integer>> toneAnnotations;
 
-    private ArrayList<Integer> framingPredProbArticles;
-    private HashMap<Integer, double[]> framingPredProbs;
-
     private ArrayList<double[]> timeFramesReals;     // phi
     private ArrayList<double[]> timeFramesCube;
     private ArrayList<int[]> articleFrames ;  // theta
     private double[] timeEntropy;
-    private ArrayList<double[]> timeToneReals;     // phi
-    private ArrayList<double[]> timeToneSimplex;
+    private double[] timeToneReal;     // phi
+    private double[] timeToneProb;
     private int[] articleTone ;
     private double[][] q;  // framing sensitivity
     private double[][] r;  // framing specificity
-    private double[][][] sSimplex;  // combined equivalent of sens / spec for tone
-    private double[][][] sReal;
+    private double[] qTone;  // tone specificity
+    private double[] rTone;  // tone specificity
+
     private double[] weights;
 
-    private double pposMu;
-    private double pposGamma;
-    private double pnegMu;
-    private double pnegGamma;
-
-    private double mu_q = 0.667;
-    private double gamma_q = 1.5;
-
     private double[] framesMean;
-    private double[] tonesMean;
+    private double meanTone;
     private double[] globalMean;
 
     private double[] mood;
@@ -91,7 +82,7 @@ public class CombinedModelRefined {
 
     private double timeFramesRealSigma = 0.01;
     private double timeToneRealSigma = 0.01;
-    private double weightSigma = 20.0;
+    private double weightSigma = 5.0;
     private double moodSigma = 0.25;
 
     // Metropolis-Hastings step parameters
@@ -101,15 +92,12 @@ public class CombinedModelRefined {
     private static double mhOneWeightStepSigma = 0.0001;
     private static double mhQSigma = 0.05;
     private static double mhRSigma = 0.05;
-    private static double mhSSigma = 0.05;
-    private static double [][] mhSCovariance = {{mhSSigma, 0, 0}, {0, mhSSigma, 0}, {0, 0, mhSSigma}};
-    private static double mhMuSigma = 0.05;
 
     private static Random rand = new Random();
     private static RandomStream randomStream = new MRG32k3a();
     private static Sigmoid sigmoid = new Sigmoid();
 
-    public CombinedModelRefined(String inputFilename, String metadataFilename, String predictionsFilename, String moodFilename,
+    public CombinedModelBinaryTone(String inputFilename, String metadataFilename, String predictionsFilename, String moodFilename,
                          boolean normalizeStoriesAtTime, boolean normalizeMood) throws Exception {
 
         Path inputPath = Paths.get(inputFilename);
@@ -219,7 +207,7 @@ public class CombinedModelRefined {
         framingAnnotations = new ArrayList<>();
         toneAnnotations = new ArrayList<>();
         framesMean = new double[nLabels];
-        tonesMean = new double[nTones];
+        double meanPos;
 
         int framingCount = 0;
         int toneCount = 0;
@@ -276,19 +264,13 @@ public class CombinedModelRefined {
                     if (articleToneAnnotations.size() > 0) {
                         // get a new article id (i)
                         int i = toneArticleNames.size();
-                        // store the article name for future reference
-                        toneArticleNames.add(articleName.toString());
                         // get the timestep for this article (by name)
                         int time = articleNameTime.get(articleName.toString());
-                        toneArticleTime.put(i, time);
-                        // get the newspaper for this article (by name)
-                        toneArticleNewspaper.put(i, articleNameNewspaper.get(articleName.toString()));
-                        // create a hashmap to store the annotations for this article
                         HashMap<Integer, Integer> articleAnnotations = new HashMap<>();
                         // loop through the annotators for this article
                         for (Object annotator : articleToneAnnotations.keySet()) {
                             // for each one, prepare to hold the tone annotation
-                            int toneAnnotation = 0;
+                            int toneAnnotation = -1;
                             // get the anntoator name and index
                             String parts[] = annotator.toString().split("_");
                             int annotatorIndex = toneAnnotatorIndices.get(parts[0]);
@@ -298,17 +280,35 @@ public class CombinedModelRefined {
                                 // get the code
                                 double realCode = (Double) ((JSONObject) annotation).get("code");
                                 // subtract 17 for zero-based indexing
-                                toneAnnotation = (int) Math.round(realCode) - 17;
+                                double intCode = (int) Math.round(realCode) - 17;
+                                if (intCode == 0) {
+                                    toneAnnotation = 1;
+                                } else if (intCode == 2) {
+                                    toneAnnotation = 0;
+                                } else {
+                                    toneAnnotation = -1;
+                                }
                             }
                             // store the annotations for this annotator
-                            articleAnnotations.put(annotatorIndex, toneAnnotation);
-                            toneAnnotatorArticles.get(annotatorIndex).add(i);
-                            tonesMean[toneAnnotation] += 1.0;
-                            toneCount += 1;
+                            if (toneAnnotation >= 0) {
+                                articleAnnotations.put(annotatorIndex, toneAnnotation);
+                                toneAnnotatorArticles.get(annotatorIndex).add(i);
+                                meanTone += 1.0;
+                                toneCount += 1;
+
+                            }
                         }
-                        // store the annotations for this article
-                        toneAnnotations.add(articleAnnotations);
-                        timeToneArticles.get(time).add(i);
+                        if (articleAnnotations.size() > 0) {
+                            // store the article name for future reference
+                            toneArticleNames.add(articleName.toString());
+                            toneArticleTime.put(i, time);
+                            // get the newspaper for this article (by name)
+                            toneArticleNewspaper.put(i, articleNameNewspaper.get(articleName.toString()));
+                            // create a hashmap to store the annotations for this article
+                            // store the annotations for this article
+                            toneAnnotations.add(articleAnnotations);
+                            timeToneArticles.get(time).add(i);
+                        }
                     }
                 }
             }
@@ -316,7 +316,7 @@ public class CombinedModelRefined {
 
         // read in predictions and add to annotations
         Scanner scanner = new Scanner(new File(predictionsFilename));
-        HashMap<String, double[]> framingPredictions = new HashMap<>();
+        HashMap<String, int[]> framingPredictions = new HashMap<>();
         HashMap<String, Integer> tonePredictions = new HashMap<>();
         scanner.useDelimiter(",");
         // skip the header
@@ -325,7 +325,7 @@ public class CombinedModelRefined {
             next = "";
         }
         String rowArticleName = "";
-        double[] pArray = new double[nLabels];
+        int[] pArray = new int[nLabels];
         int tVal = 0;
         int iNext = 0;
         int isTrain = 0;
@@ -342,13 +342,13 @@ public class CombinedModelRefined {
                 }
             }
             else if (j > 2 && j < 18) {
-                pArray[j-3] = Double.parseDouble(next);
+                pArray[j-3] = Integer.parseInt(next);
             }
             else if (j == 18) {
                 tVal = Integer.parseInt(next);
                 framingPredictions.put(rowArticleName, pArray);
                 tonePredictions.put(rowArticleName, tVal);
-                pArray = new double[nLabels];
+                pArray = new int[nLabels];
             }
             iNext += 1;
         }
@@ -357,10 +357,8 @@ public class CombinedModelRefined {
         scanner.close();
 
         // incorporate the predictions into the annotations
-        //int annotatorIndex = nFramingAnnotators;
-        //framingAnnotatorArticles.put(annotatorIndex, new ArrayList<>());
-        framingPredProbArticles = new ArrayList<>();
-        framingPredProbs = new HashMap<>();
+        int annotatorIndex = nFramingAnnotators;
+        framingAnnotatorArticles.put(annotatorIndex, new ArrayList<>());
         for (String articleName : framingPredictions.keySet()) {
             // check if this article is in the list of valid articles
             if (articleNameTime.containsKey(articleName)) {
@@ -370,12 +368,15 @@ public class CombinedModelRefined {
                         // add the prediction to the set of new annotations
                         // get the article ID
                         int i = framingArticleNames.indexOf(articleName);
-
-                        framingPredProbs.put(i, framingPredictions.get(articleName));
-
+                        // create a hashmap to store the annotations for this article
+                        HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
+                        // treat predictions as coming from a separate annotator
+                        articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
+                        // store the annotations for this article
+                        framingAnnotations.set(i, articleAnnotations);
                         // if this is not a training article, use it to estimate classifier properties
                         if (!trainingArticles.contains(articleName)) {
-                            framingPredProbArticles.add(i);
+                            framingAnnotatorArticles.get(annotatorIndex).add(i);
                         }
                     } else {
                         // add information for a new article
@@ -389,21 +390,24 @@ public class CombinedModelRefined {
                         // get the newspaper for this article (by name)
                         framingArticleNewspaper.put(i, articleNameNewspaper.get(articleName));
                         // create a hashmap to store the annotations for this article
-                        framingPredProbs.put(i, framingPredictions.get(articleName));
-
+                        HashMap<Integer, int[]> articleAnnotations = new HashMap<>();
+                        // treat predictions as coming from a separate anntoator
+                        // loop through this annotator's annotations
+                        articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
                         // also use these unannotated articles for estimation of classifier properties
                         //framingAnnotatorArticles.get(annotatorIndex).add(i);
                         //for (int j = 0; j < nLabels; j++) {
                         //    framesMean[j] += (double) framingPredictions.get(articleName)[j];
                         //}
                         // store the annotations for this article
+                        framingAnnotations.add(articleAnnotations);
                         timeFramingArticles.get(time).add(i);
                         //framingCount += 1;
                     }
                 }
             }
         }
-        //nFramingAnnotators += 1;
+        nFramingAnnotators += 1;
 
         System.out.println(framingAnnotations.size() + " articles with framing annotations");
 
@@ -436,7 +440,7 @@ public class CombinedModelRefined {
         */
 
         // treat the predictions as a new anntotator
-        int annotatorIndex = nToneAnnotators;
+        annotatorIndex = nToneAnnotators;
         toneAnnotatorArticles.put(annotatorIndex, new ArrayList<>());
         for (String articleName : tonePredictions.keySet()) {
             // check if this article is in the list of valid articles
@@ -448,37 +452,56 @@ public class CombinedModelRefined {
                         // create a hashmap to store the annotations for this article
                         HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
                         // treat predictions as coming from a separate annotator
-                        articleAnnotations.put(annotatorIndex, tonePredictions.get(articleName));
-                        // store the annotations for this article
-                        toneAnnotations.set(i, articleAnnotations);
-                        // as above
-                        if (!trainingArticles.contains(articleName)) {
-                            toneAnnotatorArticles.get(annotatorIndex).add(i);
+                        int tonePrediction = tonePredictions.get(articleName);
+                        Integer code = -1;
+                        if (tonePrediction == 0) {
+                            code = 1;
+                        }
+                        else if (tonePrediction == 2) {
+                            code = 0;
+                        }
+                        if (code >= 0) {
+                            articleAnnotations.put(annotatorIndex, code);
+                            // store the annotations for this article
+                            toneAnnotations.set(i, articleAnnotations);
+                            // as above
+                            if (!trainingArticles.contains(articleName)) {
+                                toneAnnotatorArticles.get(annotatorIndex).add(i);
+                            }
                         }
                     } else {
                         // add information for a new article
                         // get a new article id (i)
                         int i = toneArticleNames.size();
-                        // store the article name for future reference
-                        toneArticleNames.add(articleName);
                         // get the timestep for this article (by name)
                         int time = articleNameTime.get(articleName);
-                        toneArticleTime.put(i, time);
-                        // get the newspaper for this article (by name)
-                        toneArticleNewspaper.put(i, articleNameNewspaper.get(articleName));
-                        // create a hashmap to store the annotations for this article
                         HashMap<Integer, Integer> articleAnnotations = new HashMap<>();
-                        // treat predictions as coming from a separate anntoator
+                        // treat predictions as coming from a separate annotator
                         // loop through this annotator's annotations
                         Integer tonePrediction = tonePredictions.get(articleName);
-                        articleAnnotations.put(annotatorIndex, tonePrediction);
-                        // as above
-                        //toneAnnotatorArticles.get(annotatorIndex).add(i);
-                        //tonesMean[tonePrediction] += 1.0;
-                        // store the annotations for this article
-                        toneAnnotations.add(articleAnnotations);
-                        timeToneArticles.get(time).add(i);
-                        //toneCount += 1;
+                        Integer code = -1;
+                        if (tonePrediction == 0) {
+                            code = 1;
+                        }
+                        else if (tonePrediction == 2) {
+                            code = 0;
+                        }
+                        if (code >= 0) {
+                            articleAnnotations.put(annotatorIndex, code);
+                            // as above
+                            //toneAnnotatorArticles.get(annotatorIndex).add(i);
+                            //tonesMean[tonePrediction] += 1.0;
+                            // store the annotations for this article
+                            toneAnnotations.add(articleAnnotations);
+                            timeToneArticles.get(time).add(i);
+                            // store the article name for future reference
+                            toneArticleNames.add(articleName);
+                            toneArticleTime.put(i, time);
+                            // get the newspaper for this article (by name)
+                            toneArticleNewspaper.put(i, articleNameNewspaper.get(articleName));
+                            // create a hashmap to store the annotations for this article
+                            //toneCount += 1;
+                        }
                     }
                 }
             }
@@ -491,23 +514,18 @@ public class CombinedModelRefined {
         for (int j = 0; j < nLabels; j++) {
             framesMean[j] = framesMean[j] / (double) framingCount;
         }
-        for (int j = 0; j < nTones; j++) {
-            tonesMean[j] = tonesMean[j] / (double) toneCount;
-        }
 
-        nArticlesWithFraming = framingArticleNames.size();
-        nArticlesWithTone = toneArticleNames.size();
+        meanTone = meanTone / (double) toneCount;
+
+        nArticlesWithFraming = framingAnnotations.size();
+        nArticlesWithTone = toneAnnotations.size();
 
         System.out.println("Mean of annotations:");
         for (int j = 0; j < nLabels; j++) {
             System.out.print(framesMean[j] + " ");
         }
 
-        System.out.println("Mean of tone annotations:");
-        for (int j = 0; j < nTones; j++) {
-            System.out.print(tonesMean[j] + " ");
-        }
-        System.out.println("");
+        System.out.println("Mean of tone annotations:" + meanTone);
 
         // read in mood data
         mood = new double[nTimes];
@@ -574,10 +592,10 @@ public class CombinedModelRefined {
         }
         */
 
-        initialize();
+        //initialize();
+
 
     }
-
 
     private int yearAndMonthToTime(int year, int month) {
         int quarter = (int) Math.floor((double) month / (double) nMonthsPerQuarter);
@@ -687,27 +705,18 @@ public class CombinedModelRefined {
             int initialLabels[] = new int[nLabels];
             double annotationCounts[] = new double[nLabels];
             // add the contributions of each annotator
-            if (framingAnnotations.contains(i)) {
-                HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
-                double nAnnotators = (double) articleAnnotations.size();
-                for (int annotator : articleAnnotations.keySet()) {
-                    int annotatorAnnotations[] = articleAnnotations.get(annotator);
-                    for (int j = 0; j < nLabels; j++) {
-                        annotationCounts[j] += (double) annotatorAnnotations[j] / nAnnotators;
-                    }
-                }
+            HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
+            double nAnnotators = (double) articleAnnotations.size();
+            for (int annotator : articleAnnotations.keySet()) {
+                int annotatorAnnotations[] = articleAnnotations.get(annotator);
                 for (int j = 0; j < nLabels; j++) {
-                    double u = rand.nextDouble();
-                    if (u < annotationCounts[j]) {
-                        initialLabels[j] = 1;
-                    }
+                    annotationCounts[j] += (double) annotatorAnnotations[j] / nAnnotators;
                 }
-            } else {
-                for (int j = 0; j < nLabels; j++) {
-                    double u = rand.nextDouble();
-                    if (u < framesMean[j]) {
-                        initialLabels[j] = 1;
-                    }
+            }
+            for (int j = 0; j < nLabels; j++) {
+                double u = rand.nextDouble();
+                if (u < annotationCounts[j]) {
+                    initialLabels[j] = 1;
                 }
             }
             articleFrames.add(initialLabels);
@@ -716,24 +725,27 @@ public class CombinedModelRefined {
         // initialize article tones based on annotations
         articleTone = new int[nArticlesWithTone];
         for (int i = 0; i < nArticlesWithTone; i++) {
-            double annotationCounts[] = new double[nTones];
+            double posCounts = 0;
             // add the contributions of each annotator
             HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
             double nAnnotators = (double) articleAnnotations.size();
             for (int annotator : articleAnnotations.keySet()) {
                 int annotatorTone = articleAnnotations.get(annotator);
-                annotationCounts[annotatorTone] += 1.0 / nAnnotators;
+                posCounts += ((double) annotatorTone) / nAnnotators;
             }
-            MultinomialDistribution multinomialDistribution = new MultinomialDistribution(annotationCounts, nTones);
-            int initialTone = multinomialDistribution.sample(rand);
+            double u = rand.nextDouble();
+            int initialTone = 0;
+            if (u < posCounts) {
+                initialTone = 1;
+            }
             articleTone[i] = initialTone;
         }
 
         // initialize timeFrames as the mean of the corresponding articles (+ global mean)
         timeFramesReals = new ArrayList<>();
         timeFramesCube = new ArrayList<>();
-        timeToneReals = new ArrayList<>();
-        timeToneSimplex = new ArrayList<>();
+        timeToneReal = new double[nTimes];
+        timeToneProb = new double[nTimes];
         timeEntropy = new double[nTimes];
 
         for (int t = 0; t < nTimes; t++) {
@@ -758,23 +770,21 @@ public class CombinedModelRefined {
             timeFramesReals.add(timeFramesMeanReals);
             timeEntropy[t] = computeEntropy(timeFramesMean);
 
-            double timeTonesMeanSimplex[] = new double[nTones];
+            double timeTonesMeanProb = 0.0;
 
             // initialize everything with the global mean
             articles = timeToneArticles.get(t);
             double nTimeToneArticles = (double) articles.size();
-            for (int j = 0; j < nTones; j++) {
-                timeTonesMeanSimplex[j] += tonesMean[j] / (nTimeToneArticles + 1);
-            }
+
+            timeTonesMeanProb = meanTone / (nTimeToneArticles + 1);
             for (int i : articles) {
                 int tone = articleTone[i];
-                timeTonesMeanSimplex[tone] += 1.0 / (nTimeToneArticles + 1);
+                timeTonesMeanProb += ((double) tone) / (nTimeToneArticles + 1);
             }
 
-            double timeTonesMeanReals[] = Transformations.simplexToReals(timeTonesMeanSimplex, nTones);
-
-            timeToneSimplex.add(timeTonesMeanSimplex);
-            timeToneReals.add(timeTonesMeanReals);
+            double real = Transformations.unitToReal(timeTonesMeanProb);
+            timeToneProb[t] = timeTonesMeanProb;
+            timeToneReal[t] = real;
 
         }
 
@@ -790,26 +800,12 @@ public class CombinedModelRefined {
             }
         }
 
-        double priorCorrect = 0.8;
-        sSimplex = new double[nToneAnnotators][nTones][nTones];
-        sReal = new double[nToneAnnotators][nTones][nTones];
+        qTone = new double[nToneAnnotators];
+        rTone = new double[nToneAnnotators];
         for (int k = 0; k < nToneAnnotators; k++) {
-            for (int j = 0; j < nTones; j++) {
-                for (int j2 = 0; j2 < nTones; j2++) {
-                    if (j == j2) {
-                        sSimplex[k][j][j2] = priorCorrect;
-                    } else {
-                        sSimplex[k][j][j2] = (1.0 - priorCorrect) / (nTones - 1);
-                    }
-                }
-                sReal[k][j] = Transformations.simplexToReals(sSimplex[k][j], nTones);
-            }
+            qTone[k] = 0.8;
+            rTone[k] = 0.8;
         }
-
-        pposMu = 0.8;
-        pposGamma = 1.5;
-        pnegMu = 0.2;
-        pnegGamma = 1.5;
 
         // initialize weights
         weights = new double[nFeatures];
@@ -823,7 +819,7 @@ public class CombinedModelRefined {
         weights[6] = -0.3;
         */
 
-    }
+    //}
 
 
     void run(int nIter, int burnIn, int samplingPeriod, int printPeriod) throws  Exception {
@@ -837,9 +833,9 @@ public class CombinedModelRefined {
         double weightSamples [][] = new double[nSamples][nFeatures];
         double qSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
         double rSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
-        double sSamples [][][][] = new double[nSamples][nToneAnnotators][nTones][nTones];
-        double pposMuSamples [] = new double[nSamples];
-        double pnegMuSamples [] = new double[nSamples];
+        double qToneSamples [][] = new double[nSamples][nToneAnnotators];
+        double rToneSamples [][] = new double[nSamples][nToneAnnotators];
+
         double entropySamples [][] = new double[nSamples][nTimes];
         double moodSamples[][] = new double[nSamples][nTimes];
 
@@ -851,24 +847,22 @@ public class CombinedModelRefined {
         double oneWeightRate = 0.0;
         double [][] qRate = new double[nFramingAnnotators][nLabels];
         double [][] rRate = new double[nFramingAnnotators][nLabels];
-        double [][] sRate = new double[nToneAnnotators][nTones];
-        double pposMuRate = 0.0;
-        double pnegMuRate = 0.0;
+        double [] qToneRate = new double[nFramingAnnotators];
+        double [] rToneRate = new double[nFramingAnnotators];
+
 
         int sample = 0;
         int i = 0;
         while (sample < nSamples) {
             timeFrameRate += sampleTimeFrames();
             sampleArticleFrames();
-            pposMuRate += samplePosMu();
-            pnegMuRate += sampleNegMu();
             timeTonesRate += sampleTimeTones();
             sampleArticleTones();
-            //double [] weightAcceptances = sampleWeights();
-            //for (int f = 0; f < nFeatures; f++) {
-            //    weightRate[f] += (double) weightAcceptances[f];
-            //}
-            oneWeightRate += sampleAllWeights();
+            double [] weightAcceptances = sampleWeights();
+            for (int f = 0; f < nFeatures; f++) {
+                weightRate[f] += (double) weightAcceptances[f];
+            }
+            //oneWeightRate += sampleAllWeights();
             double [][] qAcceptances = sampleQ();
             for (int k = 0; k < nFramingAnnotators; k++) {
                 for (int j = 0; j < nLabels; j++) {
@@ -881,12 +875,6 @@ public class CombinedModelRefined {
                     rRate[k][j] += rAcceptances[k][j];
                 }
             }
-            double [][] sAcceptances = sampleS();
-            for (int k = 0; k < nToneAnnotators; k++) {
-                for (int j = 0; j < nTones; j++) {
-                    sRate[k][j] += sAcceptances[k][j];
-                }
-            }
 
             //globalMean = recomputeGlobalMean();
 
@@ -896,35 +884,28 @@ public class CombinedModelRefined {
                 for (int t = 0; t < nTimes; t++) {
                     System.arraycopy(timeFramesCube.get(t), 0, timeFrameSamples[sample][t], 0, nLabels);
                 }
-                for (int t = 0; t < nTimes; t++) {
-                    System.arraycopy(timeToneSimplex.get(t), 0, timeToneSamples[sample][t], 0, nTones);
-                }
+
+                System.arraycopy(timeToneReal, 0, timeToneSamples, 0, nTimes);
+
                 for (int f = 0; f < nFeatures; f++) {
                     System.arraycopy(weights, 0, weightSamples[sample], 0, nFeatures);
                 }
-                /*
-                for (int a = 0; a < nArticlesWithFraming; a++) {
-                    System.arraycopy(articleFrames.get(a), 0, articleFrameSamples[sample][a], 0, nLabels);
-                }
-                System.arraycopy(articleTone, 0, articleToneSamples[sample], 0, nArticlesWithTone);
-                */
-
-                pposMuSamples[sample] = pposMu;
-                pnegMuSamples[sample] = pnegMu;
+                //
+                //for (int a = 0; a < nArticlesWithFraming; a++) {
+                //    System.arraycopy(articleFrames.get(a), 0, articleFrameSamples[sample][a], 0, nLabels);
+                //}
+                //System.arraycopy(articleTone, 0, articleToneSamples[sample], 0, nArticlesWithTone);
+                //
 
                 for (int k = 0; k < nFramingAnnotators; k++) {
                     System.arraycopy(q[k], 0, qSamples[sample][k], 0, nLabels);
                     System.arraycopy(r[k], 0, rSamples[sample][k], 0, nLabels);
                 }
-                for (int k = 0; k < nToneAnnotators; k++) {
-                    for (int l = 0; l < nTones; l++) {
-                        System.arraycopy(sSimplex[k][l], 0, sSamples[sample][k][l], 0, nTones);
-                    }
-                }
+
                 System.arraycopy(timeEntropy, 0, entropySamples[sample], 0, nTimes);
 
                 for (int t = 0; t < nTimes; t++) {
-                    double [] featureVector = computeFeatureVector(t, timeToneSimplex.get(t), timeEntropy[t]);
+                    double [] featureVector = computeFeatureVector(t, timeToneProb[t], timeEntropy[t]);
                     double moodMean = 0.0;
                     for (int f = 0; f < nFeatures; f++) {
                         moodMean += featureVector[f] * weights[f];
@@ -952,11 +933,11 @@ public class CombinedModelRefined {
         // Display acceptance rates
         System.out.println(timeFrameRate / i);
         System.out.println(timeTonesRate / i);
-        //System.out.println("weight rates");
-        //for (int f = 0; f < nFeatures; f++) {
-        //    System.out.println(weightRate[f] / i);
-        //}
-        System.out.println("weight rates: " + oneWeightRate / i);
+        System.out.println("weight rates");
+        for (int f = 0; f < nFeatures; f++) {
+            System.out.println(weightRate[f] / i);
+        }
+        //System.out.println("weight rates: " + oneWeightRate / i);
         System.out.println(articleFramesRate / i);
         System.out.println(articleToneRates / i);
         System.out.println("Q rates");
@@ -973,15 +954,7 @@ public class CombinedModelRefined {
             }
             System.out.print("\n");
         }
-        System.out.println("S rates");
-        for (int k = 0; k < nToneAnnotators; k++) {
-            for (int j = 0; j < nTones; j++) {
-                System.out.print(sRate[k][j] / i + " ");
-            }
-            System.out.print("\n");
-        }
-        System.out.println("pposMu rate: " + pposMuRate / i);
-        System.out.println("pnegMu rate: " + pnegMuRate / i);
+
 
         // save results
         Path output_path;
@@ -997,32 +970,13 @@ public class CombinedModelRefined {
             }
         }
 
-        // save results
-        output_path = Paths.get("samples", "pposMuSamples.csv");
+        output_path = Paths.get("samples", "timeToneSamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (sample = 0; sample < nSamples; sample++) {
-                file.write(pposMuSamples[sample] + ",");
-            }
-            file.write("\n");
-        }
-
-        output_path = Paths.get("samples", "pnegMuSamples.csv");
-        try (FileWriter file = new FileWriter(output_path.toString())) {
-            for (sample = 0; sample < nSamples; sample++) {
-                file.write(pposMuSamples[sample] + ",");
-            }
-            file.write("\n");
-        }
-
-        for (int k = 0; k < nTones; k++) {
-            output_path = Paths.get("samples", "timeToneSamples" + k + ".csv");
-            try (FileWriter file = new FileWriter(output_path.toString())) {
-                for (sample = 0; sample < nSamples; sample++) {
-                    for (int t = 0; t < nTimes; t++) {
-                        file.write(timeToneSamples[sample][t][k] + ",");
-                    }
-                    file.write("\n");
+                for (int t = 0; t < nTimes; t++) {
+                    file.write(timeToneSamples[sample][t] + ",");
                 }
+                file.write("\n");
             }
         }
 
@@ -1071,18 +1025,6 @@ public class CombinedModelRefined {
             }
         }
 
-        for (int j = 0; j < nTones; j++) {
-            output_path = Paths.get("samples", "sSensitivitySamples" + j + ".csv");
-            try (FileWriter file = new FileWriter(output_path.toString())) {
-                for (sample = 0; sample < nSamples; sample++) {
-                    for (int k = 0; k < nToneAnnotators; k++) {
-                        file.write(sSamples[sample][k][j][j] + ",");
-                    }
-                    file.write("\n");
-                }
-            }
-        }
-
         output_path = Paths.get("samples", "moodSamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (sample = 0; sample < nSamples; sample++) {
@@ -1093,44 +1035,9 @@ public class CombinedModelRefined {
             }
         }
 
-        // What I actually want is maybe the annotation probabilities (?)
-
-        /*
-        output_path = Paths.get("samples", "articleMeans.csv");
-        try (FileWriter file = new FileWriter(output_path.toString())) {
-            for (int a = 0; a < nArticles; a++) {
-                double mean [] = new double[nLabels];
-                HashMap<Integer, int[]> articleAnnotations = annotations.get(a);
-                for (int annotator : articleAnnotations.keySet()) {
-                    for (int k = 0; k < nLabels; k++) {
-                        mean[k] += (double) articleAnnotations.get(annotator)[k] / (double) articleAnnotations.size();
-                    }
-                }
-                for (int k = 0; k < nLabels; k++) {
-                    file.write(mean[k] + ",");
-                }
-                file.write("\n");
-            }
-        }
-        */
-
-        /*
-        for (int k = 0; k < nLabels; k++) {
-            output_path = Paths.get("samples", "articleProbs" + k + ".csv");
-            try (FileWriter file = new FileWriter(output_path.toString())) {
-                for (s = 0; s < nSamples; s++) {
-                    for (int a = 0; a < nArticles; a++) {
-                        double pk = sigmoid.value(articleFrameSamples[s][a][k] * zealSamples[s][0][k] - biasSamples[s][0][k]);
-                        file.write(pk + ",");
-                    }
-                    file.write("\n");
-                }
-            }
-        }
-        */
     }
 
-    private double[] computeFeatureVector(int time, double [] toneProbs, double entropy) {
+    private double[] computeFeatureVector(int time, double posToneProb, double entropy) {
         double featureVector[] = new double[nFeatures];
         featureVector[0] = 1;                                    // intercept
         if (time > 0) {
@@ -1140,7 +1047,8 @@ public class CombinedModelRefined {
             featureVector[1] = mood[time];                       // cheap substitute for previous mood in first year
         }
         featureVector[2] = nArticlesAtTime[time];                // number of articles published in time t
-        featureVector[3] = toneProbs[0] - toneProbs[2];          // net tone at time t
+        // TODO: try using posToneProb - 0.5
+        featureVector[3] = posToneProb;                          // net tone at time t
         featureVector[4] = featureVector[2] * featureVector[3];  // interaction b/w tone and nArticles
         featureVector[5] = entropy;                              // entropy
         featureVector[6] = featureVector[3] * featureVector[5];  // interaction b/w tone and entropy
@@ -1249,9 +1157,9 @@ public class CombinedModelRefined {
             }
 
             // compute probabilities of mood for current and proposed latent framing probs
-            double currentVector[] = computeFeatureVector(t, timeToneSimplex.get(t), timeEntropy[t]);
+            double currentVector[] = computeFeatureVector(t, timeToneProb[t], timeEntropy[t]);
             double proposalEntropy = computeEntropy(proposalCube);
-            double proposalVector[] = computeFeatureVector(t, timeToneSimplex.get(t), proposalEntropy);
+            double proposalVector[] = computeFeatureVector(t, timeToneProb[t], proposalEntropy);
 
             pLogCurrent += computeLogProbMood(currentVector, weights, mood[t], moodSigma);
             pLogProposal += computeLogProbMood(proposalVector, weights, mood[t], moodSigma);
@@ -1274,15 +1182,6 @@ public class CombinedModelRefined {
     private void sampleArticleFrames() {
         // don't bother to track acceptance because we're going to properly use Gibbs for this
 
-        double ppos_alpha = Transformations.betaMuGammaToAlpha(pposMu, pposGamma);
-        double ppos_beta =  Transformations.betaMuGammaToBeta(pposMu, pposGamma);
-
-        double pneg_alpha = Transformations.betaMuGammaToAlpha(pnegMu, pnegGamma);
-        double pneg_beta = Transformations.betaMuGammaToAlpha(pnegMu, pnegGamma);
-
-        BetaDistribution posDist = new BetaDistribution(ppos_alpha, ppos_beta);
-        BetaDistribution negDist = new BetaDistribution(pneg_alpha, pneg_beta);
-
         // loop through all articles
         for (int i = 0; i < nArticlesWithFraming; i++) {
 
@@ -1299,19 +1198,11 @@ public class CombinedModelRefined {
                 double pLogNegGivenTime = Math.log(1-timeFrames[j]);
 
                 // compute the probability of the labels for both current and proposal
-                if (i < framingAnnotations.size()) {
-                    HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
-                    for (int annotator : articleAnnotations.keySet()) {
-                        int labels[] = articleAnnotations.get(annotator);
-                        pLogPosGivenTime += labels[j] * Math.log(q[annotator][j]) + (1 - labels[j]) * Math.log(1 - r[annotator][j]);
-                        pLogNegGivenTime += labels[j] * Math.log(1 - q[annotator][j]) + (1 - labels[j]) * Math.log(r[annotator][j]);
-                    }
-                }
-
-                if (framingPredProbs.containsKey(i)) {
-                    double predProb = framingPredProbs.get(i)[j];
-                    pLogPosGivenTime += Math.log(posDist.density(predProb));
-                    pLogNegGivenTime += Math.log(negDist.density(predProb));
+                HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
+                for (int annotator : articleAnnotations.keySet()) {
+                    int labels[] = articleAnnotations.get(annotator);
+                    pLogPosGivenTime += labels[j] * Math.log(q[annotator][j]) + (1-labels[j]) * Math.log(1-r[annotator][j]);
+                    pLogNegGivenTime += labels[j] * Math.log(1-q[annotator][j]) + (1-labels[j]) * Math.log(r[annotator][j]);
                 }
 
                 double pPosUnnorm = Math.exp(pLogPosGivenTime);
@@ -1329,103 +1220,6 @@ public class CombinedModelRefined {
     }
 
 
-    private double samplePosMu() {
-        // run the distribution over tones for the first time point
-
-        double nAccepted = 0;
-
-        double current = pposMu;
-        double proposal = pposMu + rand.nextGaussian() * mhMuSigma;
-
-        if (proposal > 0 && proposal < 1) {
-
-            double currentAlpha = Transformations.betaMuGammaToAlpha(current, pposGamma);
-            double currentBeta = Transformations.betaMuGammaToBeta(current, pposGamma);
-
-            double proposalAlpha = Transformations.betaMuGammaToAlpha(proposal, pposGamma);
-            double proposalBeta = Transformations.betaMuGammaToBeta(proposal, pposGamma);
-
-            BetaDistribution currentDist = new BetaDistribution(currentAlpha, currentBeta);
-            BetaDistribution proposalDist = new BetaDistribution(proposalAlpha, proposalBeta);
-
-            double pLogCurrent = 0.0;
-            double pLogProposal = 0.0;
-
-            // loop through all articles
-            for (int i = 0; i < nArticlesWithFraming; i++) {
-                if (framingPredProbs.containsKey(i)) {
-                    // get the current article dist
-                    int articleLabels[] = articleFrames.get(i);
-                    for (int j = 0; j < nLabels; j++) {
-                        double predProb = framingPredProbs.get(i)[j];
-                        pLogCurrent += articleLabels[j] * Math.log(currentDist.density(predProb));
-                        pLogProposal += articleLabels[j] * Math.log(proposalDist.density(predProb));
-                    }
-                }
-            }
-
-            double a = Math.exp(pLogProposal - pLogCurrent);
-            double u = rand.nextDouble();
-
-            if (u < a) {
-                pposMu = proposal;
-                nAccepted += 1;
-            }
-        }
-
-        return nAccepted;
-    }
-
-
-
-    private double sampleNegMu() {
-        // run the distribution over tones for the first time point
-
-        double nAccepted = 0;
-
-        double current = pnegMu;
-        double proposal = pnegMu + rand.nextGaussian() * mhMuSigma;
-
-        if (proposal > 0 && proposal < 1) {
-
-            double currentAlpha = Transformations.betaMuGammaToAlpha(current, pnegGamma);
-            double currentBeta = Transformations.betaMuGammaToBeta(current, pnegGamma);
-
-            double proposalAlpha = Transformations.betaMuGammaToAlpha(proposal, pnegGamma);
-            double proposalBeta = Transformations.betaMuGammaToBeta(proposal, pnegGamma);
-
-            BetaDistribution currentDist = new BetaDistribution(currentAlpha, currentBeta);
-            BetaDistribution proposalDist = new BetaDistribution(proposalAlpha, proposalBeta);
-
-            double pLogCurrent = 0.0;
-            double pLogProposal = 0.0;
-
-            // loop through all articles
-            for (int i = 0; i < nArticlesWithFraming; i++) {
-                if (framingPredProbs.containsKey(i)) {
-                    // get the current article dist
-                    int articleLabels[] = articleFrames.get(i);
-                    for (int j = 0; j < nLabels; j++) {
-                        double predProb = framingPredProbs.get(i)[j];
-                        pLogCurrent += (1 - articleLabels[j]) * Math.log(currentDist.density(predProb));
-                        pLogCurrent += (1 - articleLabels[j]) * Math.log(proposalDist.density(predProb));
-                    }
-                }
-            }
-
-            double a = Math.exp(pLogProposal - pLogCurrent);
-            double u = rand.nextDouble();
-
-            if (u < a) {
-                pnegMu = proposal;
-                nAccepted += 1;
-            }
-        }
-
-        return nAccepted;
-    }
-
-
     private double sampleTimeTones() {
         // run the distribution over tones for the first time point
 
@@ -1435,80 +1229,60 @@ public class CombinedModelRefined {
         for (int t = 0; t < nTimes; t++) {
 
             // get the current distribution over tones
-            double currentSimplex[] = timeToneSimplex.get(t);
-            double currentReals[] = timeToneReals.get(t);
+            double currentProb = timeToneProb[t];
+            double currentReal = timeToneReal[t];
             // create a variable for a proposal
-            double proposalReals[] = new double[nTones];
-
-            double mean[] = new double[nTones];
-            double covariance[][] = new double[nTones][nTones];
-            for (int k = 0; k < nTones; k++) {
-                covariance[k][k] = 1;
-            }
-            MultivariateNormalDistribution normDist = new MultivariateNormalDistribution(mean, covariance);
-            double normalStep[] = normDist.sample();
-            double step = rand.nextGaussian() * mhTimeToneStepSigma;
-
-            // apply the step to generate a proposal
-            for (int k = 0; k < nTones; k++) {
-                proposalReals[k] = currentReals[k] + normalStep[k] * step;
-            }
-
-            // transform the proposal to the simplex
-            double proposalSimplex[] = Transformations.realsToSimplex(proposalReals, nTones);
+            double proposalReal = currentReal + rand.nextGaussian() * mhTimeToneStepSigma;
+            double proposalProb = Transformations.realToUnit(proposalReal);
 
             // get the distribution over tones at the previous time point
-            double previousReals[] = new double[nTones];
-            double priorCovariance[][] = new double[nTones][nTones];
-            double priorNextCovariance[][] = new double[nTones][nTones];
+            double previousReal = 0.0;
+            double priorVariance;
+            double priorNextVariance;
             if (t > 0) {
-                previousReals = timeToneReals.get(t-1);
+                previousReal = timeToneReal[t-1];
                 // compute a distribution over the current time point given previous
-                for (int k = 0; k < nTones; k++) {
-                    priorCovariance[k][k] = timeToneRealSigma;
-                    priorNextCovariance[k][k] = timeToneRealSigma;
-                }
+                priorVariance = timeToneRealSigma;
+                priorNextVariance = timeToneRealSigma;
+
             } else {
                 // if t == 0, use the global mean
                 //double [] previousSimplex = new double[nTones];
                 //System.arraycopy(tonesMean, 0, previousSimplex, 0, nTones);
                 //previousReals = Transformations.simplexToReals(previousSimplex, nTones);
                 // compute a distribution over the current time point given previous
-                for (int k = 0; k < nTones; k++) {
-                    priorCovariance[k][k] = timeToneRealSigma * 100;
-                    priorNextCovariance[k][k] = timeToneRealSigma;
-                }
+                priorVariance = timeToneRealSigma * 100;
+                priorNextVariance = timeToneRealSigma;
             }
 
+            NormalDistribution previousDist = new NormalDistribution(previousReal, priorVariance);
 
-            MultivariateNormalDistribution previousDist = new MultivariateNormalDistribution(previousReals, priorCovariance);
-
-            double pLogCurrent = Math.log(previousDist.density(currentReals));
-            double pLogProposal = Math.log(previousDist.density(proposalReals));
+            double pLogCurrent = Math.log(previousDist.density(currentReal));
+            double pLogProposal = Math.log(previousDist.density(proposalReal));
 
             // get the distribution over tones in the next time point
             if (t < nTimes-1) {
-                double nextReals[] = timeToneReals.get(t+1);
+                double nextReal = timeToneReal[t+1];
 
                 // compute a distribution over a new distribution over tones for the current distribution
-                MultivariateNormalDistribution currentDist = new MultivariateNormalDistribution(currentReals, priorNextCovariance);
-                MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(proposalReals, priorNextCovariance);
+                NormalDistribution currentDist = new NormalDistribution(currentReal, priorNextVariance);
+                NormalDistribution proposalDist = new NormalDistribution(proposalReal, priorNextVariance);
 
-                pLogCurrent += Math.log(currentDist.density(nextReals));
-                pLogProposal += Math.log(proposalDist.density(nextReals));
+                pLogCurrent += Math.log(currentDist.density(nextReal));
+                pLogProposal += Math.log(proposalDist.density(nextReal));
             }
 
             // compute the probability of the article tones for both current and proposal
             ArrayList<Integer> articles = timeToneArticles.get(t);
             for (int i : articles) {
                 int iTone = articleTone[i];
-                pLogCurrent += Math.log(currentSimplex[iTone]);
-                pLogProposal += Math.log(proposalSimplex[iTone]);
+                pLogCurrent += iTone * Math.log(currentProb) + (1-iTone) * Math.log(1-currentProb);
+                pLogProposal += iTone * Math.log(proposalProb) + (1-iTone) * Math.log(1-proposalProb);
             }
 
             // compute probabilities of mood for current and proposed latent framing probs
-            double currentVector[] = computeFeatureVector(t, currentSimplex, timeEntropy[t]);
-            double proposalVector[] = computeFeatureVector(t, proposalSimplex, timeEntropy[t]);
+            double currentVector[] = computeFeatureVector(t, currentProb, timeEntropy[t]);
+            double proposalVector[] = computeFeatureVector(t, proposalProb, timeEntropy[t]);
 
             pLogCurrent += computeLogProbMood(currentVector, weights, mood[t], moodSigma);
             pLogProposal += computeLogProbMood(proposalVector, weights, mood[t], moodSigma);
@@ -1517,8 +1291,8 @@ public class CombinedModelRefined {
             double u = rand.nextDouble();
 
             if (u < a) {
-                timeToneSimplex.set(t, proposalSimplex);
-                timeToneReals.set(t, proposalReals);
+                timeToneProb[t] = proposalProb;
+                timeToneReal[t] = proposalReal;
                 nAccepted += 1;
             }
 
@@ -1629,12 +1403,12 @@ public class CombinedModelRefined {
 
         proposal = proposalDist.sample();
 
-        /*
-        double [] means = new double[nFeatures];
-        for (int f = 0; f < nFeatures; f++) {
-            covar[f][f] = weightSigma;
-        }
-        */
+
+        //double [] means = new double[nFeatures];
+        //for (int f = 0; f < nFeatures; f++) {
+        //    covar[f][f] = weightSigma;
+        //}
+
         NormalDistribution prior = new NormalDistribution(0, weightSigma);
         double pLogCurrent = 0.0;
         double pLogProposal = 0.0;
@@ -1645,7 +1419,7 @@ public class CombinedModelRefined {
         }
 
         for (int t = 0; t < nTimes; t++) {
-            double [] featureVector = computeFeatureVector(t, timeToneSimplex.get(t), timeEntropy[t]);
+            double [] featureVector = computeFeatureVector(t, timeToneProb[t], timeEntropy[t]);
             pLogCurrent += computeLogProbMood(featureVector, current, mood[t], moodSigma);
             pLogProposal += computeLogProbMood(featureVector, proposal, mood[t], moodSigma);
         }
@@ -1678,22 +1452,6 @@ public class CombinedModelRefined {
 
                 double a;
                 if (proposal > 0 && proposal < 1) {
-
-                    /*
-                    // using somewhat strong beta prior for now
-                    double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
-                    double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
-
-                    if (alpha < 1 || beta < 1) {
-                        System.out.println("Undesired beta parameters in Q");
-                        alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
-                        beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
-                    }
-
-                    BetaDistribution prior = new BetaDistribution(alpha, beta);
-                    double pLogCurrent = prior.density(current);
-                    double pLogProposal = prior.density(proposal);
-                    */
 
                     // try using a U[0,1] prior and hope initialization guides us to identifiability
                     double pLogCurrent = 0.0;
@@ -1748,24 +1506,6 @@ public class CombinedModelRefined {
                 double a;
                 if (proposal > 0 && proposal < 1) {
 
-                    /*
-                    // using somewhat strong beta prior for now
-                    //BetaDistribution prior = new BetaDistribution(q_mu * q_gamma / (1 - q_mu), q_gamma);
-                    double alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
-                    double beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
-
-                    if (alpha < 1 || beta < 1) {
-                        System.out.println("Undesired beta parameters in R");
-                        alpha = Transformations.betaMuGammaToAlpha(mu_q, gamma_q);
-                        beta = Transformations.betaMuGammaToBeta(mu_q, gamma_q);
-                    }
-
-                    BetaDistribution prior = new BetaDistribution(alpha, beta);
-
-                    double pLogCurrent = prior.density(current);
-                    double pLogProposal = prior.density(proposal);
-                    */
-
                     double pLogCurrent = 0.0;
                     double pLogProposal = 0.0;
 
@@ -1816,7 +1556,7 @@ public class CombinedModelRefined {
                 double proposalReal [] = multNormDist.sample();
                 double proposalSimplex [] = Transformations.realsToSimplex(proposalReal, nTones);
 
-                /*
+
                 // using pretty strong Dirichlet prior for now
                 double alpha[] = {1.0, 1.0, 1.0};
                 alpha[l] = 2.0;
@@ -1824,10 +1564,10 @@ public class CombinedModelRefined {
 
                 double pLogCurrent = Math.log(prior.density(currentSimplex));
                 double pLogProposal = Math.log(prior.density(proposalSimplex));
-                */
 
-                double pLogCurrent = 0.0;
-                double pLogProposal = 0.0;
+
+                //double pLogCurrent = 0.0;
+                //double pLogProposal = 0.0;
 
                 for (int article : articles) {
                     int tone = articleTone[article];
@@ -1876,6 +1616,7 @@ public class CombinedModelRefined {
         return mean;
     }
 
+    */
 
     /*
     private double sampleTimeFramesGuassian() {

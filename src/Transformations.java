@@ -1,6 +1,7 @@
 
 class Transformations {
 
+
     // Note: reals to simplex is not uniquely reversible; prob should just use this once...
     static double[] simplexToReals(double[] simplex, int size) {
         double reals[] = new double[size];
@@ -21,6 +22,16 @@ class Transformations {
             simplex[k] = simplex[k] / sum;
         }
         return simplex;
+    }
+
+    static double unitToReal(double unit) {
+        double real = Math.log(-Math.log(unit));
+        return real;
+    }
+
+    static double realToUnit(double real) {
+        double unit = Math.exp(-Math.exp(real));
+        return unit;
     }
 
     static double[] cubeToReals(double p[], int size) {
