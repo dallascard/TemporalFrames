@@ -1045,7 +1045,7 @@ public class CombinedModelBinaryTone {
         output_path = Paths.get("samples", "qToneSamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (sample = 0; sample < nSamples; sample++) {
-                for (int k = 0; k < nFramingAnnotators; k++) {
+                for (int k = 0; k < nToneAnnotators; k++) {
                     file.write(qToneSamples[sample][k] + ",");
                 }
                 file.write("\n");
@@ -1055,7 +1055,7 @@ public class CombinedModelBinaryTone {
         output_path = Paths.get("samples", "rToneSamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (sample = 0; sample < nSamples; sample++) {
-                for (int k = 0; k < nFramingAnnotators; k++) {
+                for (int k = 0; k < nToneAnnotators; k++) {
                     file.write(rToneSamples[sample][k] + ",");
                 }
                 file.write("\n");
