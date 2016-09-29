@@ -1338,7 +1338,7 @@ public class CombinedModel {
         double [][] currentCovar = new double[nTones][nTones];
         double [][] proposalCovar = new double[nTones][nTones];
 
-        for (int j = 0; j < nLabels; j++) {
+        for (int j = 0; j < nTones; j++) {
             currentCovar[j][j] = current;
             proposalCovar[j][j] = proposal;
         }
