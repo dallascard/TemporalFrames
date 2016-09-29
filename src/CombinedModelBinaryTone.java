@@ -80,14 +80,16 @@ public class CombinedModelBinaryTone {
     private double[] mood;
     private double[] nArticlesAtTime;
 
-    private double timeFramesRealSigma = 0.01;
-    private double timeToneRealSigma = 0.01;
+    private double timeFramesRealSigma = 0.1;
+    private double timeToneRealSigma = 0.1;
     private double weightSigma = 5.0;
     private double moodSigma = 0.25;
 
     // Metropolis-Hastings step parameters
-    private static double mhTimeFramesStepSigma = 0.05 ;
-    private static double mhTimeToneStepSigma = 0.01 ;
+    private static double mhTimeFramesStepSigma = 0.02 ;
+    private static double mhTimeFramesRealSigmaStep = 0.01;
+    private static double mhTimeToneStepSigma = 0.02 ;
+    private static double mhTimeToneRealSigmaStep = 0.01;
     private static double [] mhWeightsStepSigma = {0.05, 0.2, 0.2, 0.2, 0.5, 0.01, 0.05};
     private static double mhOneWeightStepSigma = 0.0001;
     private static double mhQSigma = 0.05;
@@ -367,17 +369,17 @@ public class CombinedModelBinaryTone {
                 if (!irrelevantArticles.contains(articleName)) {
                     //JSONObject article = (JSONObject) data.get(articleName);
                     if (framingArticleNames.contains(articleName)) {
-                        // add the prediction to the set of new annotations
-                        // get the article ID
-                        int i = framingArticleNames.indexOf(articleName);
-                        // create a hashmap to store the annotations for this article
-                        HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
-                        // treat predictions as coming from a separate annotator
-                        articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
-                        // store the annotations for this article
-                        framingAnnotations.set(i, articleAnnotations);
-                        // if this is not a training article, use it to estimate classifier properties
                         if (!trainingArticles.contains(articleName)) {
+                            // add the prediction to the set of new annotations
+                            // get the article ID
+                            int i = framingArticleNames.indexOf(articleName);
+                            // create a hashmap to store the annotations for this article
+                            HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
+                            // treat predictions as coming from a separate annotator
+                            articleAnnotations.put(annotatorIndex, framingPredictions.get(articleName));
+                            // store the annotations for this article
+                            framingAnnotations.set(i, articleAnnotations);
+                            // if this is not a training article, use it to estimate classifier properties
                             framingAnnotatorArticles.get(annotatorIndex).add(i);
                         }
                     } else {
@@ -449,25 +451,24 @@ public class CombinedModelBinaryTone {
             if (articleNameTime.containsKey(articleName)) {
                 if (!irrelevantArticles.contains(articleName)) {
                     if (toneArticleNames.contains(articleName)) {
-                        // get the article ID
-                        int i = toneArticleNames.indexOf(articleName);
-                        // create a hashmap to store the annotations for this article
-                        HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
-                        // treat predictions as coming from a separate annotator
-                        int tonePrediction = tonePredictions.get(articleName);
-                        Integer code = -1;
-                        if (tonePrediction == 0) {
-                            code = 1;
-                        }
-                        else if (tonePrediction == 2) {
-                            code = 0;
-                        }
-                        if (code >= 0) {
-                            articleAnnotations.put(annotatorIndex, code);
-                            // store the annotations for this article
-                            toneAnnotations.set(i, articleAnnotations);
-                            // as above
-                            if (!trainingArticles.contains(articleName)) {
+                        if (!trainingArticles.contains(articleName)) {
+                            // get the article ID
+                            int i = toneArticleNames.indexOf(articleName);
+                            // create a hashmap to store the annotations for this article
+                            HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(i);
+                            // treat predictions as coming from a separate annotator
+                            int tonePrediction = tonePredictions.get(articleName);
+                            Integer code = -1;
+                            if (tonePrediction == 0) {
+                                code = 1;
+                            }
+                            else if (tonePrediction == 2) {
+                                code = 0;
+                            }
+                            if (code >= 0) {
+                                articleAnnotations.put(annotatorIndex, code);
+                                // store the annotations for this article
+                                toneAnnotations.set(i, articleAnnotations);
                                 toneAnnotatorArticles.get(annotatorIndex).add(i);
                             }
                         }
@@ -830,8 +831,10 @@ public class CombinedModelBinaryTone {
 
         double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
         int articleFrameSamples [][][] = new int[nSamples][nArticlesWithFraming][nLabels];
+        double timeFrameRealSigmaSamples [] = new double[nSamples];
         double timeToneSamples [][] = new double[nSamples][nTimes];
         int articleToneSamples [][] = new int[nSamples][nArticlesWithTone];
+        double timeToneRealSigmaSamples [] = new double[nSamples];
         double weightSamples [][] = new double[nSamples][nFeatures];
         double qSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
         double rSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
@@ -843,6 +846,8 @@ public class CombinedModelBinaryTone {
 
         double timeFrameRate = 0.0;
         double articleFramesRate = 0;
+        double timeFramesSigmaRate = 0;
+        double timeToneSigmaRate = 0;
         double timeTonesRate = 0.0;
         double articleToneRates = 0.0;
         double [] weightRate = new double[nFeatures];
@@ -858,8 +863,10 @@ public class CombinedModelBinaryTone {
         while (sample < nSamples) {
             timeFrameRate += sampleTimeFrames();
             sampleArticleFrames();
+            timeFramesSigmaRate += sampleTimeoFramesRealSigma();
             timeTonesRate += sampleTimeTones();
             sampleArticleTones();
+            timeToneSigmaRate += sampleTimeToneRealSigma();
             double [] weightAcceptances = sampleWeights();
             for (int f = 0; f < nFeatures; f++) {
                 weightRate[f] += (double) weightAcceptances[f];
@@ -894,8 +901,9 @@ public class CombinedModelBinaryTone {
                 for (int t = 0; t < nTimes; t++) {
                     System.arraycopy(timeFramesCube.get(t), 0, timeFrameSamples[sample][t], 0, nLabels);
                 }
-
+                timeFrameRealSigmaSamples[sample] = timeFramesRealSigma;
                 System.arraycopy(timeToneProb, 0, timeToneSamples[sample], 0, nTimes);
+                timeToneRealSigmaSamples[sample] = timeToneRealSigma;
 
                 for (int f = 0; f < nFeatures; f++) {
                     System.arraycopy(weights, 0, weightSamples[sample], 0, nFeatures);
@@ -944,7 +952,9 @@ public class CombinedModelBinaryTone {
 
         // Display acceptance rates
         System.out.println(timeFrameRate / i);
+        System.out.println(timeFramesSigmaRate / i);
         System.out.println(timeTonesRate / i);
+        System.out.println(timeToneSigmaRate / i);
         System.out.println("weight rates");
         for (int f = 0; f < nFeatures; f++) {
             System.out.println(weightRate[f] / i);
@@ -992,6 +1002,14 @@ public class CombinedModelBinaryTone {
             }
         }
 
+        output_path = Paths.get("samples", "timeFrameRealSigmaSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                file.write(timeFrameRealSigmaSamples[sample] + ",\n" );
+            }
+        }
+
+
         output_path = Paths.get("samples", "timeToneSamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (sample = 0; sample < nSamples; sample++) {
@@ -1002,6 +1020,12 @@ public class CombinedModelBinaryTone {
             }
         }
 
+        output_path = Paths.get("samples", "timeToneRealSigmaSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                file.write(timeToneRealSigmaSamples[sample] + ",\n");
+            }
+        }
 
         output_path = Paths.get("samples", "entropySamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
@@ -1262,6 +1286,43 @@ public class CombinedModelBinaryTone {
         }
     }
 
+    private double sampleTimeoFramesRealSigma() {
+        double acceptance = 0.0;
+
+        double current = timeFramesRealSigma;
+        double proposal = current + rand.nextGaussian() * mhTimeFramesRealSigmaStep;
+
+        double pLogCurrent = 0.0;
+        double pLogProposal = 0.0;
+
+        double [][] currentCovar = new double[nLabels][nLabels];
+        double [][] proposalCovar = new double[nLabels][nLabels];
+
+        for (int j = 0; j < nLabels; j++) {
+            currentCovar[j][j] = current;
+            proposalCovar[j][j] = proposal;
+        }
+
+        if (proposal > 0) {
+            for (int t = 1; t < nTimes; t++) {
+                MultivariateNormalDistribution priorCurrent = new MultivariateNormalDistribution(timeFramesReals.get(t-1), currentCovar);
+                MultivariateNormalDistribution priorProposal = new MultivariateNormalDistribution(timeFramesReals.get(t-1), proposalCovar);
+
+                pLogCurrent += Math.log(priorCurrent.density(timeFramesReals.get(t)));
+                pLogProposal += Math.log(priorProposal.density(timeFramesReals.get(t)));
+            }
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                timeFramesRealSigma = proposal;
+                acceptance += 1;
+            }
+        }
+
+        return acceptance;
+    }
+
 
     private double sampleTimeTones() {
         // run the distribution over tones for the first time point
@@ -1381,6 +1442,35 @@ public class CombinedModelBinaryTone {
         }
     }
 
+
+    private double sampleTimeToneRealSigma() {
+        double acceptance = 0.0;
+
+        double current = timeToneRealSigma;
+        double proposal = current + rand.nextGaussian() * mhTimeToneRealSigmaStep;
+
+        double pLogCurrent = 0.0;
+        double pLogProposal = 0.0;
+
+        if (proposal > 0) {
+            for (int t = 1; t < nTimes; t++) {
+                NormalDistribution priorCurrent = new NormalDistribution(timeToneReal[t-1], current);
+                NormalDistribution priorProposal = new NormalDistribution(timeToneReal[t-1], proposal);
+
+                pLogCurrent += Math.log(priorCurrent.density(timeToneReal[t]));
+                pLogProposal += Math.log(priorProposal.density(timeToneReal[t]));
+            }
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                timeToneRealSigma = proposal;
+                acceptance += 1;
+            }
+        }
+
+        return acceptance;
+    }
 
 
     private double [] sampleWeights() {
@@ -1669,6 +1759,7 @@ public class CombinedModelBinaryTone {
         }
         return nAccepted;
     }
+
 
 
 
