@@ -1754,38 +1754,43 @@ public class CombinedModel {
                 double proposalReal [] = multNormDist.sample();
                 double proposalSimplex [] = Transformations.realsToSimplex(proposalReal, nTones);
 
+                double a;
 
-                // using pretty strong Dirichlet prior for now
-                double alpha[] = {1.0, 1.0, 1.0};
-                alpha[l] = 1.5;
-                DirichletDist prior = new DirichletDist(alpha);
+                if (proposalSimplex[l] > 0.5) {
+                    // using pretty strong Dirichlet prior for now
+                    double alpha[] = {1.0, 1.0, 1.0};
+                    alpha[l] = 1.5;
+                    DirichletDist prior = new DirichletDist(alpha);
 
-                double pLogCurrent = Math.log(prior.density(currentSimplex));
-                double pLogProposal = Math.log(prior.density(proposalSimplex));
+                    double pLogCurrent = Math.log(prior.density(currentSimplex));
+                    double pLogProposal = Math.log(prior.density(proposalSimplex));
 
 
-                //double pLogCurrent = 0.0;
-                //double pLogProposal = 0.0;
+                    //double pLogCurrent = 0.0;
+                    //double pLogProposal = 0.0;
 
-                for (int article : articles) {
-                    int tone = articleTone[article];
-                    if (tone == l) {
-                        HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(article);
-                        int annotatorTone = articleAnnotations.get(k);
-                        pLogCurrent += Math.log(currentSimplex[annotatorTone]);
-                        pLogProposal += Math.log(proposalSimplex[annotatorTone]);
+                    for (int article : articles) {
+                        int tone = articleTone[article];
+                        if (tone == l) {
+                            HashMap<Integer, Integer> articleAnnotations = toneAnnotations.get(article);
+                            int annotatorTone = articleAnnotations.get(k);
+                            pLogCurrent += Math.log(currentSimplex[annotatorTone]);
+                            pLogProposal += Math.log(proposalSimplex[annotatorTone]);
+                        }
                     }
+                    a = Math.exp(pLogProposal - pLogCurrent);
+
+                    if (Double.isNaN(a)) {
+                        System.out.println("NaN in S");
+                    }
+                    if (Double.isInfinite(a)) {
+                        System.out.println("Inf in S");
+                    }
+                } else {
+                    a = -1;
                 }
-                double a = Math.exp(pLogProposal - pLogCurrent);
+
                 double u = rand.nextDouble();
-
-                if (Double.isNaN(a)) {
-                    System.out.println("NaN in S");
-                }
-                if (Double.isInfinite(a)) {
-                    System.out.println("Inf in S");
-                }
-
                 if (u < a) {
                     System.arraycopy(proposalReal, 0, sReal[k][l], 0, nTones);
                     System.arraycopy(proposalSimplex, 0, sSimplex[k][l], 0, nTones);
