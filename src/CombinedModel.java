@@ -96,6 +96,7 @@ public class CombinedModel {
     private static double mhRSigma = 0.02;
     private static double mhSSigma = 0.01;
     private static double [][] mhSCovariance = {{mhSSigma, 0, 0}, {0, mhSSigma, 0}, {0, 0, mhSSigma}};
+    private static double mhMoodSigmaStep = 0.01;
 
     private static Random rand = new Random();
     private static RandomStream randomStream = new MRG32k3a();
@@ -824,6 +825,7 @@ public class CombinedModel {
         double sSamples [][][][] = new double[nSamples][nToneAnnotators][nTones][nTones];
         double entropySamples [][] = new double[nSamples][nTimes];
         double moodSamples[][] = new double[nSamples][nTimes];
+        double moodSigmaSamples[] = new double[nSamples];
 
         double timeFrameRate = 0.0;
         double articleFramesRate = 0;
@@ -836,6 +838,7 @@ public class CombinedModel {
         double [][] qRate = new double[nFramingAnnotators][nLabels];
         double [][] rRate = new double[nFramingAnnotators][nLabels];
         double [][] sRate = new double[nToneAnnotators][nTones];
+        double moodSigmaRate = 0.0;
 
         int sample = 0;
         int i = 0;
@@ -851,6 +854,9 @@ public class CombinedModel {
                 weightRate[f] += (double) weightAcceptances[f];
             }
             //oneWeightRate += sampleAllWeights();
+
+            moodSigmaRate += sampleMoodSigma();
+
             double [][] qAcceptances = sampleQ();
             for (int k = 0; k < nFramingAnnotators; k++) {
                 for (int j = 0; j < nLabels; j++) {
@@ -893,6 +899,8 @@ public class CombinedModel {
                 System.arraycopy(articleTone, 0, articleToneSamples[sample], 0, nArticlesWithTone);
                 */
 
+                moodSigmaSamples[sample] = moodSigma;
+
                 for (int k = 0; k < nFramingAnnotators; k++) {
                     System.arraycopy(q[k], 0, qSamples[sample][k], 0, nLabels);
                     System.arraycopy(r[k], 0, rSamples[sample][k], 0, nLabels);
@@ -932,7 +940,10 @@ public class CombinedModel {
 
         // Display acceptance rates
         System.out.println(timeFrameRate / i);
+        System.out.println(timeFramesSigmaRate / i);
         System.out.println(timeTonesRate / i);
+        System.out.println(timeToneSigmaRate / i);
+        System.out.println(moodSigmaRate / i);
         System.out.println("weight rates");
         for (int f = 0; f < nFeatures; f++) {
             System.out.println(weightRate[f] / i);
@@ -1001,6 +1012,13 @@ public class CombinedModel {
         try (FileWriter file = new FileWriter(output_path.toString())) {
             for (sample = 0; sample < nSamples; sample++) {
                 file.write(timeToneRealSigmaSamples[sample] + ",\n");
+            }
+        }
+
+        output_path = Paths.get("samples", "moodSigmaSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                file.write(moodSigmaSamples[sample] + ",\n" );
             }
         }
 
@@ -1599,6 +1617,36 @@ public class CombinedModel {
         return nAccepted;
     }
 
+
+
+    private double sampleMoodSigma() {
+        double acceptance = 0.0;
+
+        double current = moodSigma;
+        double proposal = current + rand.nextGaussian() * mhMoodSigmaStep;
+
+        double pLogCurrent = 0.0;
+        double pLogProposal = 0.0;
+
+        if (proposal > 0) {
+            for (int t = 1; t < nTimes; t++) {
+
+                double [] featureVector = computeFeatureVector(t, timeToneSimplex.get(t), timeEntropy[t]);
+
+                pLogCurrent += Math.log(computeLogProbMood(featureVector, weights, mood[t], current));
+                pLogProposal += Math.log(computeLogProbMood(featureVector, weights, mood[t], proposal));
+            }
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                timeFramesRealSigma = proposal;
+                acceptance += 1;
+            }
+        }
+
+        return acceptance;
+    }
 
 
     double [][] sampleQ() {
