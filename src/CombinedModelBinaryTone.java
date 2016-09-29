@@ -87,10 +87,10 @@ public class CombinedModelBinaryTone {
 
     // Metropolis-Hastings step parameters
     private static double mhTimeFramesStepSigma = 0.02 ;
-    private static double mhTimeFramesRealSigmaStep = 0.01;
+    private static double mhTimeFramesRealSigmaStep = 0.005;
     private static double mhTimeToneStepSigma = 0.02 ;
     private static double mhTimeToneRealSigmaStep = 0.01;
-    private static double [] mhWeightsStepSigma = {0.05, 0.2, 0.2, 0.2, 0.5, 0.01, 0.05};
+    private static double [] mhWeightsStepSigma = {0.05, 0.1, 0.2, 0.1, 0.2, 0.01, 0.02};
     private static double mhOneWeightStepSigma = 0.0001;
     private static double mhQSigma = 0.05;
     private static double mhRSigma = 0.05;
