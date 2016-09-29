@@ -87,7 +87,9 @@ public class CombinedModel {
 
     // Metropolis-Hastings step parameters
     private static double mhTimeFramesStepSigma = 0.05 ;
+    private static double mhTimeFramesRealSigmaStep = 0.005;
     private static double mhTimeToneStepSigma = 0.1 ;
+    private static double mhTimeToneRealSigmaStep = 0.01;
     private static double [] mhWeightsStepSigma = {0.05, 0.1, 0.2, 0.2, 0.5, 0.01, 0.05};
     private static double mhOneWeightStepSigma = 0.0001;
     private static double mhQSigma = 0.05;
@@ -812,8 +814,10 @@ public class CombinedModel {
 
         double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
         int articleFrameSamples [][][] = new int[nSamples][nArticlesWithFraming][nLabels];
+        double timeFrameRealSigmaSamples [] = new double[nSamples];
         double timeToneSamples [][][] = new double[nSamples][nTimes][nLabels];
         int articleToneSamples [][] = new int[nSamples][nArticlesWithTone];
+        double timeToneRealSigmaSamples [] = new double[nSamples];
         double weightSamples [][] = new double[nSamples][nFeatures];
         double qSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
         double rSamples [][][] = new double[nSamples][nFramingAnnotators][nLabels];
@@ -825,6 +829,8 @@ public class CombinedModel {
         double articleFramesRate = 0;
         double timeTonesRate = 0.0;
         double articleToneRates = 0.0;
+        double timeFramesSigmaRate = 0;
+        double timeToneSigmaRate = 0;
         double [] weightRate = new double[nFeatures];
         double oneWeightRate = 0.0;
         double [][] qRate = new double[nFramingAnnotators][nLabels];
@@ -836,8 +842,10 @@ public class CombinedModel {
         while (sample < nSamples) {
             timeFrameRate += sampleTimeFrames();
             sampleArticleFrames();
+            timeFramesSigmaRate += sampleTimeFramesRealSigma();
             timeTonesRate += sampleTimeTones();
             sampleArticleTones();
+            timeToneSigmaRate += sampleTimeToneRealSigma();
             double [] weightAcceptances = sampleWeights();
             for (int f = 0; f < nFeatures; f++) {
                 weightRate[f] += (double) weightAcceptances[f];
@@ -873,6 +881,8 @@ public class CombinedModel {
                 for (int t = 0; t < nTimes; t++) {
                     System.arraycopy(timeToneSimplex.get(t), 0, timeToneSamples[sample][t], 0, nTones);
                 }
+                timeFrameRealSigmaSamples[sample] = timeFramesRealSigma;
+                timeToneRealSigmaSamples[sample] = timeToneRealSigma;
                 for (int f = 0; f < nFeatures; f++) {
                     System.arraycopy(weights, 0, weightSamples[sample], 0, nFeatures);
                 }
@@ -967,6 +977,14 @@ public class CombinedModel {
             }
         }
 
+        output_path = Paths.get("samples", "timeFrameRealSigmaSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                file.write(timeFrameRealSigmaSamples[sample] + ",\n" );
+            }
+        }
+
+
         for (int k = 0; k < nTones; k++) {
             output_path = Paths.get("samples", "timeToneSamples" + k + ".csv");
             try (FileWriter file = new FileWriter(output_path.toString())) {
@@ -976,6 +994,13 @@ public class CombinedModel {
                     }
                     file.write("\n");
                 }
+            }
+        }
+
+        output_path = Paths.get("samples", "timeToneRealSigmaSamples.csv");
+        try (FileWriter file = new FileWriter(output_path.toString())) {
+            for (sample = 0; sample < nSamples; sample++) {
+                file.write(timeToneRealSigmaSamples[sample] + ",\n");
             }
         }
 
@@ -1262,6 +1287,80 @@ public class CombinedModel {
             }
             articleFrames.set(i, proposedLabels);
         }
+    }
+
+    private double sampleTimeFramesRealSigma() {
+        double acceptance = 0.0;
+
+        double current = timeFramesRealSigma;
+        double proposal = current + rand.nextGaussian() * mhTimeFramesRealSigmaStep;
+
+        double pLogCurrent = 0.0;
+        double pLogProposal = 0.0;
+
+        double [][] currentCovar = new double[nLabels][nLabels];
+        double [][] proposalCovar = new double[nLabels][nLabels];
+
+        for (int j = 0; j < nLabels; j++) {
+            currentCovar[j][j] = current;
+            proposalCovar[j][j] = proposal;
+        }
+
+        if (proposal > 0) {
+            for (int t = 1; t < nTimes; t++) {
+                MultivariateNormalDistribution priorCurrent = new MultivariateNormalDistribution(timeFramesReals.get(t-1), currentCovar);
+                MultivariateNormalDistribution priorProposal = new MultivariateNormalDistribution(timeFramesReals.get(t-1), proposalCovar);
+
+                pLogCurrent += Math.log(priorCurrent.density(timeFramesReals.get(t)));
+                pLogProposal += Math.log(priorProposal.density(timeFramesReals.get(t)));
+            }
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                timeFramesRealSigma = proposal;
+                acceptance += 1;
+            }
+        }
+
+        return acceptance;
+    }
+
+    private double sampleTimeToneRealSigma() {
+        double acceptance = 0.0;
+
+        double current = timeToneRealSigma;
+        double proposal = current + rand.nextGaussian() * mhTimeToneRealSigmaStep;
+
+        double pLogCurrent = 0.0;
+        double pLogProposal = 0.0;
+
+        double [][] currentCovar = new double[nTones][nTones];
+        double [][] proposalCovar = new double[nTones][nTones];
+
+        for (int j = 0; j < nLabels; j++) {
+            currentCovar[j][j] = current;
+            proposalCovar[j][j] = proposal;
+        }
+
+        if (proposal > 0) {
+            for (int t = 1; t < nTimes; t++) {
+                MultivariateNormalDistribution priorCurrent = new MultivariateNormalDistribution(timeToneReals.get(t-1), currentCovar);
+                MultivariateNormalDistribution priorProposal = new MultivariateNormalDistribution(timeToneReals.get(t-1), proposalCovar);
+
+                pLogCurrent += Math.log(priorCurrent.density(timeToneReals.get(t)));
+                pLogProposal += Math.log(priorProposal.density(timeToneReals.get(t)));
+            }
+            double a = Math.exp(pLogProposal - pLogCurrent);
+            double u = rand.nextDouble();
+
+            if (u < a) {
+                timeToneRealSigma = proposal;
+                acceptance += 1;
+            }
+        }
+
+        return acceptance;
     }
 
 
