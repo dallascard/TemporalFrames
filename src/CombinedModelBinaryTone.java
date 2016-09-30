@@ -430,6 +430,12 @@ public class CombinedModelBinaryTone {
             System.out.println("Annotator: " + k + "; annotations: " + framingAnnotatorArticles.get(k).size());
         }
 
+        System.out.println(toneAnnotations.size() + " articles with tone annotations");
+
+        for (k = 0; k < nToneAnnotators; k++) {
+            System.out.println("Annotator: " + k + "; annotations: " + toneAnnotatorArticles.get(k).size());
+        }
+
         /*
         // Try using all articles
         // treat the predictions as a new anntotator
