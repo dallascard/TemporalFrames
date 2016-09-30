@@ -30,7 +30,7 @@ public class CombinedModel {
     private static int nLabels = 15;
     private static int nTones = 3;
 
-    private static int firstYear = 1980;
+    private static int firstYear = 1990;
     private static int firstQuarter = 0;
     private static int nMonthsPerYear = 12;
     private static int nQuartersPerYear = 4;
