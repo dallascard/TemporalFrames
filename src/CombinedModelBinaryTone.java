@@ -327,6 +327,8 @@ public class CombinedModelBinaryTone {
             }
         }
 
+        System.out.println(toneAnnotators.size() + " articles annotated with tone");
+
         // read in predictions and add to annotations
         Scanner scanner = new Scanner(new File(predictionsFilename));
         HashMap<String, int[]> framingPredictions = new HashMap<>();
