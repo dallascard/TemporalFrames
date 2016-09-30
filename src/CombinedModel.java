@@ -855,7 +855,7 @@ public class CombinedModel {
             }
             //oneWeightRate += sampleAllWeights();
 
-            moodSigmaRate += sampleMoodSigma();
+            //moodSigmaRate += sampleMoodSigma();
 
             double [][] qAcceptances = sampleQ();
             for (int k = 0; k < nFramingAnnotators; k++) {
@@ -1014,14 +1014,6 @@ public class CombinedModel {
                 file.write(timeToneRealSigmaSamples[sample] + ",\n");
             }
         }
-
-        output_path = Paths.get("samples", "moodSigmaSamples.csv");
-        try (FileWriter file = new FileWriter(output_path.toString())) {
-            for (sample = 0; sample < nSamples; sample++) {
-                file.write(moodSigmaSamples[sample] + ",\n" );
-            }
-        }
-
 
         output_path = Paths.get("samples", "entropySamples.csv");
         try (FileWriter file = new FileWriter(output_path.toString())) {
