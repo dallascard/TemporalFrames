@@ -12,8 +12,8 @@ public class Main {
         params.put("-p", "input/uncorrected_with_tone.csv");
         //params.put("-p", "input/probs_with_tone.csv");
         params.put("-x", "input/quarter_smoothed_dummy.csv");            // mood: quarter_smoothed_dummy.csv
-        params.put("-i", "500");            // number of iterations
-        params.put("-b", "0");            // burn in
+        params.put("-i", "400");            // number of iterations
+        params.put("-b", "100");            // burn in
         params.put("-s", "10");            // sampling period
         params.put("-v", "100");            // display period
 

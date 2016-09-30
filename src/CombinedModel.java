@@ -71,7 +71,7 @@ public class CombinedModel {
     private double[][][] sReal;
     private double[] weights;
 
-
+    private double lambdaFraming;
 
     private double[] framesMean;
     private double[] tonesMean;
@@ -372,6 +372,10 @@ public class CombinedModel {
                             framingAnnotations.set(i, articleAnnotations);
                             // if this is not a training article, use it to estimate classifier properties
                             framingAnnotatorArticles.get(annotatorIndex).add(i);
+                            //for (int j = 0; j < nLabels; j++) {
+                            //    framesMean[j] += (double) framingPredictions.get(articleName)[j];
+                            //}
+                            //framingCount += 1;
                         }
                     } else {
                         // add information for a new article
@@ -814,6 +818,8 @@ public class CombinedModel {
         weights[6] = -0.3;
         */
 
+
+
     }
 
 
@@ -822,7 +828,7 @@ public class CombinedModel {
         System.out.println("Collecting " + nSamples + " samples");
 
         double timeFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
-        int articleFrameSamples [][][] = new int[nSamples][nArticlesWithFraming][nLabels];
+        double articleFrameSamples [][][] = new double[nSamples][nTimes][nLabels];
         double timeFrameRealSigmaSamples [] = new double[nSamples];
         double timeToneSamples [][][] = new double[nSamples][nTimes][nLabels];
         int articleToneSamples [][] = new int[nSamples][nArticlesWithTone];
@@ -836,7 +842,7 @@ public class CombinedModel {
         double moodSigmaSamples[] = new double[nSamples];
 
         double timeFrameRate = 0.0;
-        double articleFramesRate = 0;
+        double [] articleFramesRate = new double[nLabels];
         double timeTonesRate = 0.0;
         double articleToneRates = 0.0;
         double timeFramesSigmaRate = 0;
@@ -852,7 +858,10 @@ public class CombinedModel {
         int i = 0;
         while (sample < nSamples) {
             timeFrameRate += sampleTimeFrames();
-            sampleArticleFrames();
+            double[] articleAcceptances = sampleArticleFrames();
+            for (int j = 0; j < nLabels; j++)  {
+                articleFramesRate[j] += articleAcceptances[j];
+            }
             timeFramesSigmaRate += sampleTimeFramesRealSigma();
             timeTonesRate += sampleTimeTones();
             sampleArticleTones();
@@ -929,6 +938,21 @@ public class CombinedModel {
                     moodSamples[sample][t] = moodMean;
                 }
 
+                // store the actual number of articles coded with each frame in each time period
+                for (i = 0; i < nArticlesWithFraming; i++) {
+                    for (int j = 0; j < nLabels; j++) {
+                        int time = framingArticleTime.get(i);
+                        articleFrameSamples[sample][time][j] += articleFrames.get(i)[j];
+                    }
+                }
+                for (int t = 0; t < nTimes; t++) {
+                    double tArticles = timeFramingArticles.get(t).size();
+                    for (int j = 0; j < nLabels; j++) {
+                        articleFrameSamples[sample][t][j] = articleFrameSamples[sample][t][j] / tArticles;
+                    }
+                }
+
+
                 sample += 1;
             }
 
@@ -957,7 +981,10 @@ public class CombinedModel {
             System.out.println(weightRate[f] / i);
         }
         //System.out.println("weight rates: " + oneWeightRate / i);
-        System.out.println(articleFramesRate / i);
+        System.out.println("article framing rates: " + oneWeightRate / i);
+        for (int j= 0; j < nLabels; j++) {
+            System.out.println(articleFramesRate[j] / i);
+        }
         System.out.println(articleToneRates / i);
         System.out.println("Q rates");
         for (int k = 0; k < nFramingAnnotators; k++) {
@@ -990,6 +1017,18 @@ public class CombinedModel {
                 for (sample = 0; sample < nSamples; sample++) {
                     for (int t = 0; t < nTimes; t++) {
                         file.write(timeFrameSamples[sample][t][k] + ",");
+                    }
+                    file.write("\n");
+                }
+            }
+        }
+
+        for (int k = 0; k < nLabels; k++) {
+            output_path = Paths.get("samples", "articleFramesSamples" + k + ".csv");
+            try (FileWriter file = new FileWriter(output_path.toString())) {
+                for (sample = 0; sample < nSamples; sample++) {
+                    for (int t = 0; t < nTimes; t++) {
+                        file.write(articleFrameSamples[sample][t][k] + ",");
                     }
                     file.write("\n");
                 }
@@ -1217,7 +1256,17 @@ public class CombinedModel {
                 }
             }
 
-            MultivariateNormalDistribution previousDist = new MultivariateNormalDistribution(previousReals, priorCovariance);
+            lambdaFraming = 0.5;
+            double [] previousDistMean = new double [nLabels];
+            double [] currentDistMean = new double [nLabels];
+            double [] proposalDistMean = new double [nLabels];
+            for (int k = 0; k < nLabels; k++ ) {
+                previousDistMean[k] = (1-lambdaFraming) * previousReals[k] + lambdaFraming * framesMean[k];
+                currentDistMean[k] = (1-lambdaFraming) * currentReals[k] + lambdaFraming * framesMean[k];
+                proposalDistMean[k] = (1-lambdaFraming) * proposalReals[k] + lambdaFraming * framesMean[k];
+            }
+
+            MultivariateNormalDistribution previousDist = new MultivariateNormalDistribution(previousDistMean, priorCovariance);
 
             double pLogCurrent = Math.log(previousDist.density(currentReals));
             double pLogProposal = Math.log(previousDist.density(proposalReals));
@@ -1227,8 +1276,8 @@ public class CombinedModel {
                 double nextReals[] = timeFramesReals.get(t+1);
 
                 // compute a distribution over a new distribution over frames for the current distribution
-                MultivariateNormalDistribution currentDist = new MultivariateNormalDistribution(currentReals, priorNextCovariance);
-                MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(proposalReals, priorNextCovariance);
+                MultivariateNormalDistribution currentDist = new MultivariateNormalDistribution(currentDistMean, priorNextCovariance);
+                MultivariateNormalDistribution proposalDist = new MultivariateNormalDistribution(proposalDistMean, priorNextCovariance);
 
                 pLogCurrent += Math.log(currentDist.density(nextReals));
                 pLogProposal += Math.log(proposalDist.density(nextReals));
@@ -1267,8 +1316,9 @@ public class CombinedModel {
         return nAccepted / nTimes;
     }
 
-    private void sampleArticleFrames() {
-        // don't bother to track acceptance because we're going to properly use Gibbs for this
+    private double []  sampleArticleFrames() {
+        // track changes even though we don't need to (because we're doing Gibbs)
+        double [] nAcceptances = new double[nLabels];
 
         // loop through all articles
         for (int i = 0; i < nArticlesWithFraming; i++) {
@@ -1302,9 +1352,14 @@ public class CombinedModel {
                 if (u < pPos) {
                     proposedLabels[j] = 1;
                 }
+                if (proposedLabels[j] != articleLabels[j]) {
+                    nAcceptances[j] += 1.0 / (double) nArticlesWithFraming;
+                }
+
             }
             articleFrames.set(i, proposedLabels);
         }
+        return nAcceptances;
     }
 
     private double sampleTimeFramesRealSigma() {
@@ -2012,6 +2067,12 @@ public class CombinedModel {
         return nAccepted / nTimes;
     }
     */
+
+    private double computeProbRatio(double pLogCurrent, double pLogProposal) {
+        double a = Math.exp(pLogCurrent - pLogProposal);
+
+        return a;
+    }
 
 
 }
