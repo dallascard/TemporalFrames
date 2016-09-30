@@ -1,6 +1,7 @@
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.nio.file.Path;
 import java.util.*;
@@ -285,7 +286,11 @@ public class CombinedModelRefined {
                         toneArticleNewspaper.put(i, articleNameNewspaper.get(articleName.toString()));
                         // create a hashmap to store the annotations for this article
                         HashMap<Integer, Integer> articleAnnotations = new HashMap<>();
-                        // loop through the annotators for this article
+
+                        // only take one annotation for the tone, as they should all be the same
+                        int randAnnotator = rand.nextInt(articleToneAnnotations.size());
+                        int aCount = 0;
+
                         for (Object annotator : articleToneAnnotations.keySet()) {
                             // for each one, prepare to hold the tone annotation
                             int toneAnnotation = 0;
@@ -301,10 +306,13 @@ public class CombinedModelRefined {
                                 toneAnnotation = (int) Math.round(realCode) - 17;
                             }
                             // store the annotations for this annotator
-                            articleAnnotations.put(annotatorIndex, toneAnnotation);
-                            toneAnnotatorArticles.get(annotatorIndex).add(i);
-                            tonesMean[toneAnnotation] += 1.0;
-                            toneCount += 1;
+                            if (aCount == randAnnotator) {
+                                articleAnnotations.put(annotatorIndex, toneAnnotation);
+                                toneAnnotatorArticles.get(annotatorIndex).add(i);
+                                tonesMean[toneAnnotation] += 1.0;
+                                toneCount += 1;
+                            }
+                            aCount += 1;
                         }
                         // store the annotations for this article
                         toneAnnotations.add(articleAnnotations);

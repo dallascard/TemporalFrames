@@ -272,35 +272,44 @@ public class CombinedModelBinaryTone {
                         int time = articleNameTime.get(articleName.toString());
                         HashMap<Integer, Integer> articleAnnotations = new HashMap<>();
                         // loop through the annotators for this article
+
+                        int randAnnotator = rand.nextInt(articleToneAnnotations.size());
+                        int aCount = 0;
+
                         for (Object annotator : articleToneAnnotations.keySet()) {
                             // for each one, prepare to hold the tone annotation
                             int toneAnnotation = -1;
-                            // get the anntoator name and index
-                            String parts[] = annotator.toString().split("_");
-                            int annotatorIndex = toneAnnotatorIndices.get(parts[0]);
-                            // loop through this annotator's annotations (should be only 1)
-                            JSONArray annotatorAnnotations = (JSONArray) articleToneAnnotations.get(annotator);
-                            for (Object annotation : annotatorAnnotations) {
-                                // get the code
-                                double realCode = (Double) ((JSONObject) annotation).get("code");
-                                // subtract 17 for zero-based indexing
-                                double intCode = (int) Math.round(realCode) - 17;
-                                if (intCode == 0) {
-                                    toneAnnotation = 1;
-                                } else if (intCode == 2) {
-                                    toneAnnotation = 0;
-                                } else {
-                                    toneAnnotation = -1;
+                            if (aCount == randAnnotator) {
+                                // get the anntoator name and index
+                                String parts[] = annotator.toString().split("_");
+                                int annotatorIndex = toneAnnotatorIndices.get(parts[0]);
+                                JSONArray annotatorAnnotations = (JSONArray) articleToneAnnotations.get(annotator);
+                                // only take one annotation for the tone, as they should all be the same
+
+                                for (Object annotation : annotatorAnnotations) {
+                                    // get the code
+
+                                    double realCode = (Double) ((JSONObject) annotation).get("code");
+                                    // subtract 17 for zero-based indexing
+                                    double intCode = (int) Math.round(realCode) - 17;
+                                    if (intCode == 0) {
+                                        toneAnnotation = 1;
+                                    } else if (intCode == 2) {
+                                        toneAnnotation = 0;
+                                    } else {
+                                        toneAnnotation = -1;
+                                    }
+                                }
+                                // store the annotations for this annotator
+                                if (toneAnnotation >= 0) {
+                                    articleAnnotations.put(annotatorIndex, toneAnnotation);
+                                    toneAnnotatorArticles.get(annotatorIndex).add(i);
+                                    meanTone += toneAnnotation;
+                                    toneCount += 1;
                                 }
                             }
-                            // store the annotations for this annotator
-                            if (toneAnnotation >= 0) {
-                                articleAnnotations.put(annotatorIndex, toneAnnotation);
-                                toneAnnotatorArticles.get(annotatorIndex).add(i);
-                                meanTone += toneAnnotation;
-                                toneCount += 1;
+                            aCount += 1;
 
-                            }
                         }
                         if (articleAnnotations.size() > 0) {
                             // store the article name for future reference
