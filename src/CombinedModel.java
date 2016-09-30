@@ -279,10 +279,6 @@ public class CombinedModel {
                         // create a hashmap to store the annotations for this article
                         HashMap<Integer, Integer> articleAnnotations = new HashMap<>();
 
-                        // only take one annotation for the tone, as they should all be the same
-                        int randAnnotator = rand.nextInt(articleToneAnnotations.size());
-                        int aCount = 0;
-
                         for (Object annotator : articleToneAnnotations.keySet()) {
                             // for each one, prepare to hold the tone annotation
                             int toneAnnotation = 0;
@@ -298,13 +294,10 @@ public class CombinedModel {
                                 toneAnnotation = (int) Math.round(realCode) - 17;
                             }
                             // store the annotations for this annotator
-                            if (aCount == randAnnotator) {
-                                articleAnnotations.put(annotatorIndex, toneAnnotation);
-                                toneAnnotatorArticles.get(annotatorIndex).add(i);
-                                tonesMean[toneAnnotation] += 1.0;
-                                toneCount += 1;
-                            }
-                            aCount += 1;
+                            articleAnnotations.put(annotatorIndex, toneAnnotation);
+                            toneAnnotatorArticles.get(annotatorIndex).add(i);
+                            tonesMean[toneAnnotation] += 1.0;
+                            toneCount += 1;
                         }
                         // store the annotations for this article
                         toneAnnotations.add(articleAnnotations);
