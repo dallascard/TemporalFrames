@@ -30,7 +30,7 @@ public class CombinedModel {
     private static int nLabels = 15;
     private static int nTones = 3;
 
-    private static int firstYear = 1990;
+    private static int firstYear = 1980;
     private static int firstQuarter = 0;
     private static int nMonthsPerYear = 12;
     private static int nQuartersPerYear = 4;
@@ -854,6 +854,20 @@ public class CombinedModel {
         double [][] sRate = new double[nToneAnnotators][nTones];
         double moodSigmaRate = 0.0;
 
+        double [][][] comparisons = compareAnnotators();
+        for (int k = 0; k < nLabels; k++) {
+            Path output_path = Paths.get("samples", "agreementFraming" + k + ".csv");
+            try (FileWriter file = new FileWriter(output_path.toString())) {
+                for (int j = 0; j < nFramingAnnotators; j++) {
+                    for (int j2 = 0; j2 < nFramingAnnotators; j2++) {
+                        file.write(comparisons[k][j][j2] + ",");
+                    }
+                    file.write("\n");
+                }
+            }
+        }
+
+
         int sample = 0;
         int i = 0;
         while (sample < nSamples) {
@@ -939,10 +953,10 @@ public class CombinedModel {
                 }
 
                 // store the actual number of articles coded with each frame in each time period
-                for (i = 0; i < nArticlesWithFraming; i++) {
+                for (int a = 0; a < nArticlesWithFraming; a++) {
                     for (int j = 0; j < nLabels; j++) {
-                        int time = framingArticleTime.get(i);
-                        articleFrameSamples[sample][time][j] += articleFrames.get(i)[j];
+                        int time = framingArticleTime.get(a);
+                        articleFrameSamples[sample][time][j] += articleFrames.get(a)[j];
                     }
                 }
                 for (int t = 0; t < nTimes; t++) {
@@ -1862,7 +1876,7 @@ public class CombinedModel {
                 if (proposalSimplex[l] > 0) {
                     // using pretty strong Dirichlet prior for now
                     double alpha[] = {1.0, 1.0, 1.0};
-                    alpha[l] = 3;
+                    //alpha[l] =
                     DirichletDist prior = new DirichletDist(alpha);
 
                     double pLogCurrent = Math.log(prior.density(currentSimplex));
@@ -2074,5 +2088,43 @@ public class CombinedModel {
         return a;
     }
 
+
+    private double[][][] compareAnnotators() {
+        double [][][] agreement = new double[nLabels][nFramingAnnotators][nFramingAnnotators];
+        double [][][] comparisons = new double[nLabels][nFramingAnnotators][nFramingAnnotators];
+        for (int i = 0; i < nArticlesWithFraming; i++) {
+            HashMap<Integer, int[]> articleAnnotations = framingAnnotations.get(i);
+            for (Integer j : articleAnnotations.keySet()) {
+                for (Integer j2 : articleAnnotations.keySet()) {
+                    for (int k = 0; k < nLabels; k++) {
+                        comparisons[k][j][j2] += 1;
+                        if (articleAnnotations.get(j)[k] == articleAnnotations.get(j2)[k]) {
+                            agreement[k][j][j2] += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+
+        for (int k = 0; k < nLabels; k++) {
+            double mean = 0;
+            double count = 0;
+            for (int j = 0; j < nFramingAnnotators; j++) {
+                for (int j2 = 0; j2 < nFramingAnnotators; j2++) {
+                    if (comparisons[k][j][j2] > 0) {
+                        agreement[k][j][j2] = agreement[k][j][j2] / comparisons[k][j][j2];
+                        mean += agreement[k][j][j2];
+                        count += 1;
+                    }
+                    else {
+                        agreement[k][j][j2] = 0;
+                    }
+                }
+            }
+            System.out.println(k + " " + mean/count);
+        }
+        return agreement;
+    }
 
 }
