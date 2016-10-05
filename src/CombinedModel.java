@@ -1201,7 +1201,7 @@ public class CombinedModel {
         for (int j = 0; j < nLabels; j++) {
             entropy -= (framingProbs[j] * Math.log(framingProbs[j]) + (1-framingProbs[j]) * Math.log(1-framingProbs[j]));
         }
-        return entropy;
+        return entropy / 10.4;
     }
 
     private double computeLogProbMood(double [] featureVector, double [] weights, double mood, double moodSigma) {
