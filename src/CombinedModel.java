@@ -1875,7 +1875,7 @@ public class CombinedModel {
                 if (proposalSimplex[l] > 0) {
                     // using pretty strong Dirichlet prior for now
                     double alpha[] = {1.0, 1.0, 1.0};
-                    //alpha[l] =
+                    alpha[l] = 2.0;
                     DirichletDist prior = new DirichletDist(alpha);
 
                     double pLogCurrent = Math.log(prior.density(currentSimplex));
